@@ -25,6 +25,18 @@ export function buildStreetPath(street: Street) {
   }));
 }
 
+export function buildStreetEndpoints(street: Street) {
+  const path = buildStreetPath(street);
+  const start = path[0];
+  const end = path[path.length - 1];
+
+  if (!start || !end) {
+    return null;
+  }
+
+  return { start, end };
+}
+
 export function findHighlightedStreet(streets: Street[], answerId: string) {
   return streets.find((street) => street.id === answerId) ?? null;
 }

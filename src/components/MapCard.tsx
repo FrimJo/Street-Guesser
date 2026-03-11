@@ -3,26 +3,20 @@ import { useMemo } from 'react';
 import { Text, View } from 'react-native';
 import { WebView } from 'react-native-webview';
 
-import { GOOGLE_MAP_STYLES, buildStreetPath, findHighlightedStreet, mapCardStyles, type MapCardProps } from './mapCardShared';
+import { GOOGLE_MAP_STYLES, buildStreetEndpoints, findHighlightedStreet, mapCardStyles, type MapCardProps } from './mapCardShared';
 
 const GOOGLE_MAPS_API_KEY = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY;
 
 function buildMapHtml({
   accent,
-  answerId,
-  streets,
+  destination,
+  origin,
 }: {
   accent: string;
-  answerId: string;
-  streets: MapCardProps['streets'];
+  destination: { lat: number; lng: number };
+  origin: { lat: number; lng: number };
 }) {
   const mapStyles = JSON.stringify(GOOGLE_MAP_STYLES);
-  const serializedStreets = JSON.stringify(
-    streets.map((street) => ({
-      id: street.id,
-      path: buildStreetPath(street),
-    })),
-  );
 
   return `<!doctype html>
 <html>
@@ -44,10 +38,10 @@ function buildMapHtml({
   <body>
     <div id="map"></div>
     <script>
-      const streets = ${serializedStreets};
-      const answerId = ${JSON.stringify(answerId)};
       const accent = ${JSON.stringify(accent)};
+      const destination = ${JSON.stringify(destination)};
       const mapStyles = ${mapStyles};
+      const origin = ${JSON.stringify(origin)};
 
       function renderMap() {
         const map = new google.maps.Map(document.getElementById('map'), {
@@ -62,41 +56,43 @@ function buildMapHtml({
           styles: mapStyles,
         });
 
-        const bounds = new google.maps.LatLngBounds();
-
-        streets.forEach((street) => {
-          street.path.forEach((point) => bounds.extend(point));
-          new google.maps.Polyline({
-            geodesic: false,
-            map,
-            path: street.path,
-            strokeColor: '#7890a6',
-            strokeOpacity: 0.78,
-            strokeWeight: 5,
-          });
-        });
-
-        const highlightedStreet = streets.find((street) => street.id === answerId);
-        if (highlightedStreet) {
-          new google.maps.Polyline({
-            geodesic: false,
-            map,
-            path: highlightedStreet.path,
+        const directionsService = new google.maps.DirectionsService();
+        const directionsRenderer = new google.maps.DirectionsRenderer({
+          map,
+          markerOptions: {
+            clickable: false,
+            icon: {
+              path: google.maps.SymbolPath.CIRCLE,
+              fillColor: accent,
+              fillOpacity: 1,
+              scale: 0,
+              strokeOpacity: 0,
+            },
+          },
+          polylineOptions: {
             strokeColor: accent,
-            strokeOpacity: 0.26,
-            strokeWeight: 14,
-          });
-          new google.maps.Polyline({
-            geodesic: false,
-            map,
-            path: highlightedStreet.path,
-            strokeColor: '#ffd36b',
             strokeOpacity: 1,
             strokeWeight: 8,
-          });
-        }
+          },
+          preserveViewport: false,
+          suppressInfoWindows: true,
+          suppressMarkers: true,
+        });
 
-        map.fitBounds(bounds, 40);
+        directionsService.route(
+          {
+            destination,
+            origin,
+            travelMode: google.maps.TravelMode.DRIVING,
+          },
+          (result, status) => {
+            if (status !== 'OK' || !result) {
+              return;
+            }
+
+            directionsRenderer.setDirections(result);
+          }
+        );
       }
     </script>
     <script async defer src="https://maps.googleapis.com/maps/api/js?key=${GOOGLE_MAPS_API_KEY}&callback=renderMap"></script>
@@ -106,13 +102,18 @@ function buildMapHtml({
 
 export function MapCard({ districtName, accent, streets, answerId }: MapCardProps) {
   const highlightedStreet = findHighlightedStreet(streets, answerId);
+  const endpoints = highlightedStreet ? buildStreetEndpoints(highlightedStreet) : null;
   const html = useMemo(() => {
-    if (!GOOGLE_MAPS_API_KEY || !highlightedStreet) {
+    if (!GOOGLE_MAPS_API_KEY || !endpoints) {
       return null;
     }
 
-    return buildMapHtml({ accent, answerId, streets });
-  }, [accent, answerId, highlightedStreet, streets]);
+    return buildMapHtml({
+      accent,
+      destination: endpoints.end,
+      origin: endpoints.start,
+    });
+  }, [accent, endpoints]);
 
   return (
     <LinearGradient colors={['#18324b', '#0f1e31', '#0a1523']} style={mapCardStyles.card}>

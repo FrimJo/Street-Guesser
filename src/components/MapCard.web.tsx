@@ -1,8 +1,8 @@
 import { LinearGradient } from 'expo-linear-gradient';
-import { useEffect, useId, useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { Text, View } from 'react-native';
 
-import { GOOGLE_MAP_STYLES, buildStreetPath, findHighlightedStreet, mapCardStyles, type MapCardProps } from './mapCardShared';
+import { GOOGLE_MAP_STYLES, buildStreetEndpoints, findHighlightedStreet, mapCardStyles, type MapCardProps } from './mapCardShared';
 
 declare global {
   interface Window {
@@ -41,12 +41,12 @@ function loadGoogleMaps(apiKey: string) {
 }
 
 export function MapCard({ districtName, accent, streets, answerId }: MapCardProps) {
-  const mapId = useId().replace(/:/g, '-');
   const mapRef = useRef<HTMLDivElement | null>(null);
   const highlightedStreet = findHighlightedStreet(streets, answerId);
+  const endpoints = highlightedStreet ? buildStreetEndpoints(highlightedStreet) : null;
 
   useEffect(() => {
-    if (!GOOGLE_MAPS_API_KEY || !mapRef.current || !highlightedStreet) {
+    if (!GOOGLE_MAPS_API_KEY || !mapRef.current || !highlightedStreet || !endpoints) {
       return;
     }
 
@@ -70,40 +70,43 @@ export function MapCard({ districtName, accent, streets, answerId }: MapCardProp
           styles: GOOGLE_MAP_STYLES,
         });
 
-        const bounds = new maps.LatLngBounds();
-
-        streets.forEach((street) => {
-          const path = buildStreetPath(street);
-          path.forEach((point) => bounds.extend(point));
-          new maps.Polyline({
-            geodesic: false,
-            map,
-            path,
-            strokeColor: '#7890a6',
-            strokeOpacity: 0.78,
-            strokeWeight: 5,
-          });
-        });
-
-        const highlightPath = buildStreetPath(highlightedStreet);
-        new maps.Polyline({
-          geodesic: false,
+        const directionsService = new maps.DirectionsService();
+        const directionsRenderer = new maps.DirectionsRenderer({
           map,
-          path: highlightPath,
-          strokeColor: accent,
-          strokeOpacity: 0.26,
-          strokeWeight: 14,
-        });
-        new maps.Polyline({
-          geodesic: false,
-          map,
-          path: highlightPath,
-          strokeColor: '#ffd36b',
-          strokeOpacity: 1,
-          strokeWeight: 8,
+          markerOptions: {
+            clickable: false,
+            icon: {
+              path: maps.SymbolPath.CIRCLE,
+              fillColor: accent,
+              fillOpacity: 1,
+              scale: 0,
+              strokeOpacity: 0,
+            },
+          },
+          polylineOptions: {
+            strokeColor: accent,
+            strokeOpacity: 1,
+            strokeWeight: 8,
+          },
+          preserveViewport: false,
+          suppressInfoWindows: true,
+          suppressMarkers: true,
         });
 
-        map.fitBounds(bounds, 40);
+        directionsService.route(
+          {
+            destination: endpoints.end,
+            origin: endpoints.start,
+            travelMode: maps.TravelMode.DRIVING,
+          },
+          (result: any, status: string) => {
+            if (!isActive || status !== 'OK' || !result) {
+              return;
+            }
+
+            directionsRenderer.setDirections(result);
+          },
+        );
       })
       .catch(() => {
         // Leave the fallback state in place if the script cannot load.
@@ -112,7 +115,7 @@ export function MapCard({ districtName, accent, streets, answerId }: MapCardProp
     return () => {
       isActive = false;
     };
-  }, [accent, answerId, highlightedStreet, streets]);
+  }, [accent, endpoints, highlightedStreet]);
 
   return (
     <LinearGradient colors={['#18324b', '#0f1e31', '#0a1523']} style={mapCardStyles.card}>
@@ -129,7 +132,7 @@ export function MapCard({ districtName, accent, streets, answerId }: MapCardProp
 
       {GOOGLE_MAPS_API_KEY ? (
         <View style={mapCardStyles.mapFrame}>
-          <div id={mapId} ref={mapRef} style={{ width: '100%', height: '100%' }} />
+          <div ref={mapRef} style={{ width: '100%', height: '100%' }} />
         </View>
       ) : (
         <View style={mapCardStyles.fallbackWrap}>
