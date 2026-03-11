@@ -1,147 +1,155 @@
 import { LinearGradient } from 'expo-linear-gradient';
-import { StyleSheet, Text, View } from 'react-native';
-import Svg, { Circle, Polyline, Rect } from 'react-native-svg';
+import { useMemo } from 'react';
+import { Text, View } from 'react-native';
+import { WebView } from 'react-native-webview';
 
-import type { Street } from '../data/streetPacks';
-import { displayFont, palette, shadowCard } from '../theme';
+import { GOOGLE_MAP_STYLES, buildStreetPath, findHighlightedStreet, mapCardStyles, type MapCardProps } from './mapCardShared';
 
-type MapCardProps = {
-  districtName: string;
+const GOOGLE_MAPS_API_KEY = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY;
+
+function buildMapHtml({
+  accent,
+  answerId,
+  streets,
+}: {
   accent: string;
-  streets: Street[];
   answerId: string;
-};
+  streets: MapCardProps['streets'];
+}) {
+  const mapStyles = JSON.stringify(GOOGLE_MAP_STYLES);
+  const serializedStreets = JSON.stringify(
+    streets.map((street) => ({
+      id: street.id,
+      path: buildStreetPath(street),
+    })),
+  );
 
-function toSvgPoints(street: Street) {
-  return street.route.map((point) => `${point.x},${point.y}`).join(' ');
+  return `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"
+    />
+    <style>
+      html, body, #map {
+        margin: 0;
+        height: 100%;
+        width: 100%;
+        background: #0f1e31;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="map"></div>
+    <script>
+      const streets = ${serializedStreets};
+      const answerId = ${JSON.stringify(answerId)};
+      const accent = ${JSON.stringify(accent)};
+      const mapStyles = ${mapStyles};
+
+      function renderMap() {
+        const map = new google.maps.Map(document.getElementById('map'), {
+          clickableIcons: false,
+          disableDefaultUI: true,
+          gestureHandling: 'greedy',
+          keyboardShortcuts: false,
+          mapTypeControl: false,
+          mapTypeId: 'roadmap',
+          scaleControl: false,
+          streetViewControl: false,
+          styles: mapStyles,
+        });
+
+        const bounds = new google.maps.LatLngBounds();
+
+        streets.forEach((street) => {
+          street.path.forEach((point) => bounds.extend(point));
+          new google.maps.Polyline({
+            geodesic: false,
+            map,
+            path: street.path,
+            strokeColor: '#7890a6',
+            strokeOpacity: 0.78,
+            strokeWeight: 5,
+          });
+        });
+
+        const highlightedStreet = streets.find((street) => street.id === answerId);
+        if (highlightedStreet) {
+          new google.maps.Polyline({
+            geodesic: false,
+            map,
+            path: highlightedStreet.path,
+            strokeColor: accent,
+            strokeOpacity: 0.26,
+            strokeWeight: 14,
+          });
+          new google.maps.Polyline({
+            geodesic: false,
+            map,
+            path: highlightedStreet.path,
+            strokeColor: '#ffd36b',
+            strokeOpacity: 1,
+            strokeWeight: 8,
+          });
+        }
+
+        map.fitBounds(bounds, 40);
+      }
+    </script>
+    <script async defer src="https://maps.googleapis.com/maps/api/js?key=${GOOGLE_MAPS_API_KEY}&callback=renderMap"></script>
+  </body>
+</html>`;
 }
 
 export function MapCard({ districtName, accent, streets, answerId }: MapCardProps) {
-  const highlightedStreet = streets.find((street) => street.id === answerId);
+  const highlightedStreet = findHighlightedStreet(streets, answerId);
+  const html = useMemo(() => {
+    if (!GOOGLE_MAPS_API_KEY || !highlightedStreet) {
+      return null;
+    }
+
+    return buildMapHtml({ accent, answerId, streets });
+  }, [accent, answerId, highlightedStreet, streets]);
 
   return (
-    <LinearGradient colors={['#18324b', '#0f1e31', '#0a1523']} style={styles.card}>
-      <View style={styles.header}>
+    <LinearGradient colors={['#18324b', '#0f1e31', '#0a1523']} style={mapCardStyles.card}>
+      <View style={mapCardStyles.header}>
         <View>
-          <Text style={styles.eyebrow}>{districtName}</Text>
-          <Text style={styles.title}>No labels. One glowing street.</Text>
+          <Text style={mapCardStyles.eyebrow}>{districtName}</Text>
+          <Text style={mapCardStyles.title}>Google map. Street labels removed.</Text>
         </View>
-        <View style={[styles.legendBadge, { borderColor: accent }]}>
-          <View style={[styles.legendDot, { backgroundColor: accent }]} />
-          <Text style={styles.legendText}>Target</Text>
+        <View style={[mapCardStyles.legendBadge, { borderColor: accent }]}>
+          <View style={[mapCardStyles.legendDot, { backgroundColor: accent }]} />
+          <Text style={mapCardStyles.legendText}>Target road</Text>
         </View>
       </View>
 
-      <View style={styles.mapFrame}>
-        <Svg viewBox="0 0 100 100" width="100%" height="100%">
-          <Rect x="0" y="0" width="100" height="100" rx="12" fill="rgba(255,255,255,0.02)" />
+      {html ? (
+        <View style={mapCardStyles.mapFrame}>
+          <WebView
+            originWhitelist={['*']}
+            scrollEnabled={false}
+            source={{ html }}
+            style={{ backgroundColor: 'transparent', flex: 1 }}
+          />
+        </View>
+      ) : (
+        <View style={mapCardStyles.fallbackWrap}>
+          <Text style={mapCardStyles.fallbackTitle}>Google Maps key required</Text>
+          <Text style={mapCardStyles.fallbackBody}>
+            Set `EXPO_PUBLIC_GOOGLE_MAPS_API_KEY` to render the unlabeled Google basemap and road
+            highlight.
+          </Text>
+        </View>
+      )}
 
-          <Circle cx="18" cy="18" r="3" fill="rgba(255,255,255,0.08)" />
-          <Circle cx="83" cy="22" r="2.2" fill="rgba(255,255,255,0.08)" />
-          <Circle cx="72" cy="82" r="3" fill="rgba(255,255,255,0.06)" />
-
-          {streets.map((street) => (
-            <Polyline
-              key={street.id}
-              fill="none"
-              points={toSvgPoints(street)}
-              stroke={palette.routeBase}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth="3.2"
-            />
-          ))}
-
-          {highlightedStreet ? (
-            <>
-              <Polyline
-                fill="none"
-                points={toSvgPoints(highlightedStreet)}
-                stroke={accent}
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeOpacity="0.32"
-                strokeWidth="8"
-              />
-              <Polyline
-                fill="none"
-                points={toSvgPoints(highlightedStreet)}
-                stroke={palette.highlight}
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="4.5"
-              />
-            </>
-          ) : null}
-        </Svg>
-      </View>
-
-      <Text style={styles.caption}>
-        Trace the highlighted route and match it to the right street name before you move on.
+      <Text style={mapCardStyles.caption}>
+        The basemap is standard Google roadmap styling, with road labels hidden and the target road
+        drawn by the Google Maps API.
       </Text>
     </LinearGradient>
   );
 }
-
-const styles = StyleSheet.create({
-  card: {
-    borderRadius: 28,
-    borderWidth: 1,
-    borderColor: palette.border,
-    padding: 22,
-    gap: 18,
-    ...shadowCard,
-  },
-  header: {
-    alignItems: 'flex-start',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 12,
-  },
-  eyebrow: {
-    color: palette.textMuted,
-    fontSize: 12,
-    fontWeight: '700',
-    letterSpacing: 1.6,
-    textTransform: 'uppercase',
-  },
-  title: {
-    color: palette.text,
-    fontFamily: displayFont,
-    fontSize: 26,
-    lineHeight: 29,
-    marginTop: 6,
-  },
-  legendBadge: {
-    alignItems: 'center',
-    alignSelf: 'center',
-    borderRadius: 999,
-    borderWidth: 1,
-    flexDirection: 'row',
-    gap: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
-  legendDot: {
-    borderRadius: 999,
-    height: 10,
-    width: 10,
-  },
-  legendText: {
-    color: palette.text,
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  mapFrame: {
-    aspectRatio: 1,
-    backgroundColor: 'rgba(255,255,255,0.02)',
-    borderRadius: 24,
-    overflow: 'hidden',
-    padding: 12,
-  },
-  caption: {
-    color: palette.textMuted,
-    fontSize: 14,
-    lineHeight: 21,
-  },
-});
