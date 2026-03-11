@@ -18,7 +18,6 @@
     "doctor:expo": "npm_config_loglevel=error pnpm dlx expo-doctor@latest",
     "doctor:react": "pnpm dlx react-doctor@latest . --verbose --diff",
     "preflight": "pnpm test && pnpm typecheck && pnpm lint:fix && pnpm format:fix && pnpm doctor:react && pnpm doctor:expo",
-    "vercel": "vercel",
     "vercel:link": "vercel link",
     "deploy": "vercel --prod"
   },
