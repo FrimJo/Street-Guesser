@@ -3,13 +3,23 @@
 # dependencies
 node_modules/
 
-# Expo
+# Expo / web build output
 .expo/
 dist/
 web-build/
 expo-env.d.ts
 
-# Native
+# Vercel
+.vercel/
+
+# generated native folders
+/ios
+/android
+
+# local editor / workspace state
+.cursor/
+
+# Native secrets / generated files
 .kotlin/
 *.orig.*
 *.jks
@@ -17,26 +27,24 @@ expo-env.d.ts
 *.p12
 *.key
 *.mobileprovision
+*.pem
 
 # Metro
 .metro-health-check*
 
-# debug
+# logs
+*.log
 npm-debug.*
 yarn-debug.*
 yarn-error.*
 
+# local env files
+.env
+.env.*
+!.env.example
+
 # macOS
 .DS_Store
-*.pem
 
-# local env files
-.env*.local
-
-# typescript
+# TypeScript
 *.tsbuildinfo
-
-# generated native folders
-/ios
-/android
-.vercel
