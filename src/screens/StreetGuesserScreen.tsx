@@ -6,14 +6,15 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
   useWindowDimensions,
 } from 'react-native';
-import { useEffect, useReducer } from 'react';
+import { useEffect, useReducer, useState } from 'react';
 
 import { MapCard } from '../components/MapCard';
 import { QuizOption } from '../components/QuizOption';
-import { fetchStreetPacks } from '../data/streetPacks';
+import { fetchStreetPacks, getCityOptions, type CityOption, type District } from '../data/streetPacks';
 import { buildQuizSession, scoreGuess, type QuizSession } from '../game/gameEngine';
 import { displayFont, palette, shadowCard } from '../theme';
 
@@ -37,6 +38,9 @@ type GameAction =
       session: QuizSession;
     }
   | {
+      type: 'reset';
+    }
+  | {
       type: 'guess';
       optionId: string;
     }
@@ -58,6 +62,8 @@ const initialGameState: GameState = {
 
 function gameReducer(state: GameState, action: GameAction): GameState {
   switch (action.type) {
+    case 'reset':
+      return initialGameState;
     case 'startSession':
       return {
         ...initialGameState,
@@ -114,11 +120,64 @@ function StatPill({ label, value }: { label: string; value: string }) {
   );
 }
 
+function normalizeSearchValue(value: string) {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, '');
+}
+
+function getFuzzyScore(candidate: string, query: string) {
+  const normalizedCandidate = normalizeSearchValue(candidate);
+  const normalizedQuery = normalizeSearchValue(query);
+
+  if (!normalizedQuery) {
+    return 0;
+  }
+
+  let queryIndex = 0;
+  let score = 0;
+  let streak = 0;
+
+  for (let candidateIndex = 0; candidateIndex < normalizedCandidate.length; candidateIndex += 1) {
+    if (normalizedCandidate[candidateIndex] === normalizedQuery[queryIndex]) {
+      streak += 1;
+      score += 2 + streak;
+      queryIndex += 1;
+
+      if (queryIndex === normalizedQuery.length) {
+        return score - (normalizedCandidate.length - normalizedQuery.length);
+      }
+    } else {
+      streak = 0;
+    }
+  }
+
+  return -1;
+}
+
+function getFilteredCities(cities: CityOption[], query: string) {
+  return cities
+    .map((city) => ({
+      city,
+      score: getFuzzyScore(city.name, query),
+    }))
+    .filter(({ score }) => score >= 0)
+    .sort((left, right) => {
+      if (left.score !== right.score) {
+        return right.score - left.score;
+      }
+
+      return left.city.name.localeCompare(right.city.name);
+    })
+    .map(({ city }) => city);
+}
+
 export function StreetGuesserScreen() {
   const { width } = useWindowDimensions();
   const isWide = width >= 980;
 
   const [gameState, dispatch] = useReducer(gameReducer, initialGameState);
+  const [selectedCityId, setSelectedCityId] = useState<string | null>(null);
+  const [citySearchValue, setCitySearchValue] = useState('');
+  const [isCityDropdownOpen, setIsCityDropdownOpen] = useState(false);
 
   const districtsQuery = useQuery({
     queryKey: ['street-packs'],
@@ -126,13 +185,25 @@ export function StreetGuesserScreen() {
   });
 
   useEffect(() => {
-    if (districtsQuery.data && !gameState.session) {
-      dispatch({
-        type: 'startSession',
-        session: buildQuizSession(districtsQuery.data, SESSION_LENGTH),
-      });
+    if (!districtsQuery.data || !selectedCityId) {
+      return;
     }
-  }, [districtsQuery.data, gameState.session]);
+
+    const selectedDistricts = districtsQuery.data.filter((district) => district.cityId === selectedCityId);
+
+    if (selectedDistricts.length === 0) {
+      return;
+    }
+
+    dispatch({
+      type: 'startSession',
+      session: buildQuizSession(selectedDistricts, SESSION_LENGTH),
+    });
+  }, [districtsQuery.data, selectedCityId]);
+
+  const cityOptions = districtsQuery.data ? getCityOptions(districtsQuery.data) : [];
+  const filteredCities = getFilteredCities(cityOptions, citySearchValue).slice(0, 6);
+  const selectedCity = cityOptions.find((city) => city.id === selectedCityId) ?? null;
 
   const {
     session,
@@ -149,15 +220,38 @@ export function StreetGuesserScreen() {
   const isFinished = Boolean(session) && questionIndex >= (session?.questions.length ?? 0);
   const currentQuestion = session?.questions[questionIndex];
 
-  function startFreshSession() {
-    if (!districtsQuery.data) {
+  function buildSessionForCity(cityId: string, districts: District[]) {
+    const selectedDistricts = districts.filter((district) => district.cityId === cityId);
+
+    if (selectedDistricts.length === 0) {
       return;
     }
 
     dispatch({
       type: 'startSession',
-      session: buildQuizSession(districtsQuery.data, SESSION_LENGTH),
+      session: buildQuizSession(selectedDistricts, SESSION_LENGTH),
     });
+  }
+
+  function startFreshSession() {
+    if (!districtsQuery.data || !selectedCityId) {
+      return;
+    }
+
+    buildSessionForCity(selectedCityId, districtsQuery.data);
+  }
+
+  function handleCitySelect(city: CityOption) {
+    setSelectedCityId(city.id);
+    setCitySearchValue(city.name);
+    setIsCityDropdownOpen(false);
+  }
+
+  function resetCitySelection() {
+    setSelectedCityId(null);
+    setCitySearchValue('');
+    setIsCityDropdownOpen(false);
+    dispatch({ type: 'reset' });
   }
 
   function handleGuess(optionId: string) {
@@ -205,8 +299,8 @@ export function StreetGuesserScreen() {
               Guess highlighted streets on unlabeled maps across web, iPhone, and Android.
             </Text>
             <Text style={styles.heroBody}>
-              Every round drops you into a different district. Streets stay anonymous, one route
-              lights up, and your streak depends on naming it before the city slips away.
+              Pick a city first, then work through its districts. Streets stay anonymous, one route
+              lights up, and your streak depends on naming it before the map slips away.
             </Text>
 
             <View style={styles.statGrid}>
@@ -233,19 +327,77 @@ export function StreetGuesserScreen() {
                 <Text style={styles.primaryActionLabel}>Retry</Text>
               </Pressable>
             </View>
-          ) : districtsQuery.isLoading || !session ? (
+          ) : districtsQuery.isLoading ? (
             <View style={styles.stateCard}>
               <ActivityIndicator color={palette.highlight} size="large" />
               <Text style={styles.stateTitle}>Loading districts</Text>
               <Text style={styles.stateBody}>
-                Building an unlabeled city map and selecting your first route.
+                Loading city routes and preparing the selector.
+              </Text>
+            </View>
+          ) : !selectedCity ? (
+            <View style={styles.selectorCard}>
+              <Text style={styles.selectorEyebrow}>Choose a city</Text>
+              <Text style={styles.selectorTitle}>Start by selecting where the quiz should happen.</Text>
+              <Text style={styles.selectorBody}>
+                Search for a city name and choose it from the dropdown before the first map appears.
+              </Text>
+
+              <View style={styles.selectorFieldWrap}>
+                <Text style={styles.selectorLabel}>City</Text>
+                <TextInput
+                  autoCapitalize="words"
+                  autoCorrect={false}
+                  onBlur={() => {
+                    setTimeout(() => setIsCityDropdownOpen(false), 120);
+                  }}
+                  onChangeText={(value) => {
+                    setCitySearchValue(value);
+                    setIsCityDropdownOpen(true);
+                  }}
+                  onFocus={() => setIsCityDropdownOpen(true)}
+                  placeholder="Search cities"
+                  placeholderTextColor={palette.textSoft}
+                  style={styles.selectorInput}
+                  value={citySearchValue}
+                />
+                {isCityDropdownOpen ? (
+                  <View style={styles.dropdownMenu}>
+                    {filteredCities.length > 0 ? (
+                      filteredCities.map((city) => (
+                        <Pressable
+                          key={city.id}
+                          onPress={() => handleCitySelect(city)}
+                          style={({ pressed }) => [
+                            styles.dropdownOption,
+                            pressed ? styles.dropdownOptionPressed : null,
+                          ]}
+                        >
+                          <Text style={styles.dropdownOptionLabel}>{city.name}</Text>
+                        </Pressable>
+                      ))
+                    ) : (
+                      <View style={styles.dropdownEmpty}>
+                        <Text style={styles.dropdownEmptyLabel}>No city matches that search.</Text>
+                      </View>
+                    )}
+                  </View>
+                ) : null}
+              </View>
+            </View>
+          ) : !session ? (
+            <View style={styles.stateCard}>
+              <ActivityIndicator color={palette.highlight} size="large" />
+              <Text style={styles.stateTitle}>Preparing {selectedCity.name}</Text>
+              <Text style={styles.stateBody}>
+                Building the first route set for {selectedCity.name}.
               </Text>
             </View>
           ) : isFinished ? (
             <View style={styles.summaryCard}>
               <Text style={styles.summaryEyebrow}>Session complete</Text>
               <Text style={styles.summaryTitle}>
-                You named {correctCount} of {totalQuestions} streets.
+                You named {correctCount} of {totalQuestions} streets in {selectedCity.name}.
               </Text>
               <Text style={styles.summaryBody}>
                 Final score: {score}. Best streak: {bestStreak}.{' '}
@@ -253,15 +405,26 @@ export function StreetGuesserScreen() {
                   ? 'You know this city.'
                   : 'One more lap and these districts will stick.'}
               </Text>
-              <Pressable
-                onPress={startFreshSession}
-                style={({ pressed }) => [
-                  styles.primaryAction,
-                  pressed ? styles.actionPressed : null,
-                ]}
-              >
-                <Text style={styles.primaryActionLabel}>Play another route set</Text>
-              </Pressable>
+              <View style={styles.actionRow}>
+                <Pressable
+                  onPress={resetCitySelection}
+                  style={({ pressed }) => [
+                    styles.secondaryAction,
+                    pressed ? styles.actionPressed : null,
+                  ]}
+                >
+                  <Text style={styles.secondaryActionLabel}>Change city</Text>
+                </Pressable>
+                <Pressable
+                  onPress={startFreshSession}
+                  style={({ pressed }) => [
+                    styles.primaryAction,
+                    pressed ? styles.actionPressed : null,
+                  ]}
+                >
+                  <Text style={styles.primaryActionLabel}>Play another route set</Text>
+                </Pressable>
+              </View>
             </View>
           ) : currentQuestion ? (
             <View style={[styles.playArea, isWide ? styles.playAreaWide : null]}>
@@ -313,13 +476,13 @@ export function StreetGuesserScreen() {
 
                   <View style={styles.actionRow}>
                     <Pressable
-                      onPress={startFreshSession}
+                      onPress={resetCitySelection}
                       style={({ pressed }) => [
                         styles.secondaryAction,
                         pressed ? styles.actionPressed : null,
                       ]}
                     >
-                      <Text style={styles.secondaryActionLabel}>New route set</Text>
+                      <Text style={styles.secondaryActionLabel}>Change city</Text>
                     </Pressable>
 
                     {answerState ? (
@@ -458,6 +621,88 @@ const styles = StyleSheet.create({
     lineHeight: 23,
     maxWidth: 520,
     textAlign: 'center',
+  },
+  selectorCard: {
+    backgroundColor: palette.panel,
+    borderRadius: 30,
+    borderWidth: 1,
+    borderColor: palette.border,
+    gap: 18,
+    padding: 28,
+    ...shadowCard,
+  },
+  selectorEyebrow: {
+    color: palette.highlight,
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 1.8,
+    textTransform: 'uppercase',
+  },
+  selectorTitle: {
+    color: palette.text,
+    fontFamily: displayFont,
+    fontSize: 32,
+    lineHeight: 36,
+    maxWidth: 720,
+  },
+  selectorBody: {
+    color: palette.textMuted,
+    fontSize: 15,
+    lineHeight: 23,
+    maxWidth: 620,
+  },
+  selectorFieldWrap: {
+    gap: 10,
+    maxWidth: 520,
+    position: 'relative',
+    zIndex: 10,
+  },
+  selectorLabel: {
+    color: palette.textSoft,
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+  },
+  selectorInput: {
+    backgroundColor: palette.panelElevated,
+    borderColor: palette.border,
+    borderRadius: 18,
+    borderWidth: 1,
+    color: palette.text,
+    fontSize: 16,
+    minHeight: 56,
+    paddingHorizontal: 18,
+    paddingVertical: 14,
+  },
+  dropdownMenu: {
+    backgroundColor: '#0d1b2c',
+    borderColor: palette.border,
+    borderRadius: 20,
+    borderWidth: 1,
+    marginTop: 4,
+    overflow: 'hidden',
+    ...shadowCard,
+  },
+  dropdownOption: {
+    paddingHorizontal: 18,
+    paddingVertical: 16,
+  },
+  dropdownOptionPressed: {
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+  },
+  dropdownOptionLabel: {
+    color: palette.text,
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  dropdownEmpty: {
+    paddingHorizontal: 18,
+    paddingVertical: 16,
+  },
+  dropdownEmptyLabel: {
+    color: palette.textMuted,
+    fontSize: 15,
   },
   playArea: {
     gap: 20,
