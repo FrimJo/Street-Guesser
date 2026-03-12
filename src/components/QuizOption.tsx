@@ -1,6 +1,6 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { palette } from '../theme';
+import { fontSize, palette, radius, spacing } from '../theme';
 
 type QuizOptionProps = {
   index: number;
@@ -11,7 +11,7 @@ type QuizOptionProps = {
   onPress: () => void;
 };
 
-const optionPrefixes = ['A', 'B', 'C', 'D'];
+const PREFIXES = ['A', 'B', 'C', 'D'];
 
 export function QuizOption({
   index,
@@ -21,8 +21,8 @@ export function QuizOption({
   answered,
   onPress,
 }: QuizOptionProps) {
-  const shouldRevealCorrect = answered && isCorrectOption;
-  const shouldRevealError = answered && selected && !isCorrectOption;
+  const isRevealCorrect = answered && isCorrectOption;
+  const isRevealWrong = answered && selected && !isCorrectOption;
 
   return (
     <Pressable
@@ -30,100 +30,125 @@ export function QuizOption({
       disabled={answered}
       onPress={onPress}
       style={({ pressed }) => [
-        styles.option,
-        selected && !answered ? styles.optionSelected : null,
-        shouldRevealCorrect ? styles.optionCorrect : null,
-        shouldRevealError ? styles.optionWrong : null,
-        pressed && !answered ? styles.optionPressed : null,
+        styles.root,
+        selected && !answered ? styles.rootSelected : null,
+        isRevealCorrect ? styles.rootCorrect : null,
+        isRevealWrong ? styles.rootWrong : null,
+        pressed && !answered ? styles.rootPressed : null,
       ]}
     >
       <View
         style={[
-          styles.prefix,
-          selected && !answered ? styles.prefixSelected : null,
-          shouldRevealCorrect ? styles.prefixCorrect : null,
-          shouldRevealError ? styles.prefixWrong : null,
+          styles.badge,
+          selected && !answered ? styles.badgeSelected : null,
+          isRevealCorrect ? styles.badgeCorrect : null,
+          isRevealWrong ? styles.badgeWrong : null,
         ]}
       >
-        <Text style={styles.prefixLabel}>{optionPrefixes[index] ?? '?'}</Text>
+        <Text
+          style={[
+            styles.badgeText,
+            isRevealCorrect ? styles.badgeTextCorrect : null,
+            isRevealWrong ? styles.badgeTextWrong : null,
+          ]}
+        >
+          {PREFIXES[index] ?? '?'}
+        </Text>
       </View>
 
-      <View style={styles.copyWrap}>
+      <View style={styles.content}>
         <Text style={styles.label}>{label}</Text>
-        <Text style={styles.helper}>
-          {shouldRevealCorrect
-            ? 'Correct street'
-            : shouldRevealError
-              ? 'Your guess'
-              : 'Tap to lock in'}
-        </Text>
+        {answered ? (
+          <Text
+            style={[
+              styles.hint,
+              isRevealCorrect ? styles.hintCorrect : null,
+              isRevealWrong ? styles.hintWrong : null,
+            ]}
+          >
+            {isRevealCorrect ? 'Correct' : isRevealWrong ? 'Your pick' : ''}
+          </Text>
+        ) : null}
       </View>
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
-  option: {
+  root: {
     alignItems: 'center',
-    backgroundColor: palette.panelMuted,
-    borderRadius: 20,
+    backgroundColor: palette.bgCardElevated,
+    borderRadius: radius.lg,
     borderWidth: 1,
     borderColor: palette.border,
     flexDirection: 'row',
-    gap: 14,
-    paddingHorizontal: 16,
-    paddingVertical: 16,
+    gap: spacing.md,
+    minHeight: 60,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
   },
-  optionPressed: {
-    opacity: 0.86,
+  rootPressed: {
+    backgroundColor: palette.accentMuted,
     transform: [{ scale: 0.99 }],
   },
-  optionSelected: {
-    borderColor: '#6caeff',
-    backgroundColor: 'rgba(92, 157, 255, 0.12)',
+  rootSelected: {
+    borderColor: palette.accent,
+    backgroundColor: palette.accentSoft,
   },
-  optionCorrect: {
-    borderColor: palette.success,
-    backgroundColor: 'rgba(99, 217, 164, 0.16)',
+  rootCorrect: {
+    borderColor: palette.successBorder,
+    backgroundColor: palette.successSoft,
   },
-  optionWrong: {
-    borderColor: palette.danger,
-    backgroundColor: 'rgba(255, 141, 122, 0.12)',
+  rootWrong: {
+    borderColor: palette.dangerBorder,
+    backgroundColor: palette.dangerSoft,
   },
-  prefix: {
+  badge: {
     alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    borderRadius: 14,
-    height: 44,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderRadius: radius.md,
+    height: 40,
     justifyContent: 'center',
-    width: 44,
+    width: 40,
   },
-  prefixSelected: {
-    backgroundColor: 'rgba(92, 157, 255, 0.24)',
+  badgeSelected: {
+    backgroundColor: palette.accentSoft,
   },
-  prefixCorrect: {
-    backgroundColor: 'rgba(99, 217, 164, 0.22)',
+  badgeCorrect: {
+    backgroundColor: palette.successSoft,
   },
-  prefixWrong: {
-    backgroundColor: 'rgba(255, 141, 122, 0.22)',
+  badgeWrong: {
+    backgroundColor: palette.dangerSoft,
   },
-  prefixLabel: {
+  badgeText: {
     color: palette.text,
-    fontSize: 16,
+    fontSize: fontSize.md,
     fontWeight: '800',
   },
-  copyWrap: {
+  badgeTextCorrect: {
+    color: palette.success,
+  },
+  badgeTextWrong: {
+    color: palette.danger,
+  },
+  content: {
     flex: 1,
-    gap: 4,
+    gap: 2,
   },
   label: {
     color: palette.text,
-    fontSize: 18,
-    fontWeight: '700',
+    fontSize: fontSize.lg,
+    fontWeight: '600',
   },
-  helper: {
-    color: palette.textMuted,
-    fontSize: 13,
-    fontWeight: '500',
+  hint: {
+    color: palette.textTertiary,
+    fontSize: fontSize.xs,
+    fontWeight: '600',
+  },
+  hintCorrect: {
+    color: palette.success,
+  },
+  hintWrong: {
+    color: palette.danger,
   },
 });
