@@ -1,8 +1,14 @@
-import { LinearGradient } from 'expo-linear-gradient';
 import { useEffect, useRef } from 'react';
-import { Text, View } from 'react-native';
+import { ActivityIndicator, Text, View } from 'react-native';
 
-import { GOOGLE_MAP_STYLES, buildStreetEndpoints, findHighlightedStreet, mapCardStyles, type MapCardProps } from './mapCardShared';
+import {
+  GOOGLE_MAP_STYLES,
+  buildStreetEndpoints,
+  findHighlightedStreet,
+  mapCardStyles,
+  type MapCardProps,
+} from './mapCardShared';
+import { palette } from '../theme';
 
 declare global {
   interface Window {
@@ -108,9 +114,7 @@ export function MapCard({ districtName, accent, streets, answerId }: MapCardProp
           },
         );
       })
-      .catch(() => {
-        // Leave the fallback state in place if the script cannot load.
-      });
+      .catch(() => {});
 
     return () => {
       isActive = false;
@@ -118,12 +122,9 @@ export function MapCard({ districtName, accent, streets, answerId }: MapCardProp
   }, [accent, endpoints, highlightedStreet]);
 
   return (
-    <LinearGradient colors={['#18324b', '#0f1e31', '#0a1523']} style={mapCardStyles.card}>
+    <View style={mapCardStyles.card}>
       <View style={mapCardStyles.header}>
-        <View>
-          <Text style={mapCardStyles.eyebrow}>{districtName}</Text>
-          <Text style={mapCardStyles.title}>Google map. Street labels removed.</Text>
-        </View>
+        <Text style={mapCardStyles.districtLabel}>{districtName}</Text>
         <View style={[mapCardStyles.legendBadge, { borderColor: accent }]}>
           <View style={[mapCardStyles.legendDot, { backgroundColor: accent }]} />
           <Text style={mapCardStyles.legendText}>Target road</Text>
@@ -136,18 +137,15 @@ export function MapCard({ districtName, accent, streets, answerId }: MapCardProp
         </View>
       ) : (
         <View style={mapCardStyles.fallbackWrap}>
-          <Text style={mapCardStyles.fallbackTitle}>Google Maps key required</Text>
+          <ActivityIndicator color={palette.accent} size="small" />
+          <Text style={mapCardStyles.fallbackTitle}>Map unavailable</Text>
           <Text style={mapCardStyles.fallbackBody}>
-            Set `EXPO_PUBLIC_GOOGLE_MAPS_API_KEY` to render the unlabeled Google basemap and road
-            highlight.
+            Set EXPO_PUBLIC_GOOGLE_MAPS_API_KEY to load the map.
           </Text>
         </View>
       )}
 
-      <Text style={mapCardStyles.caption}>
-        The basemap is standard Google roadmap styling, with road labels hidden and the target road
-        drawn by the Google Maps API.
-      </Text>
-    </LinearGradient>
+      <Text style={mapCardStyles.caption}>Labels hidden. Identify the highlighted road.</Text>
+    </View>
   );
 }
