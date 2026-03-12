@@ -327,7 +327,7 @@ export function StreetGuesserScreen() {
                 <Text style={styles.primaryActionLabel}>Retry</Text>
               </Pressable>
             </View>
-          ) : districtsQuery.isLoading || !session ? (
+          ) : districtsQuery.isLoading ? (
             <View style={styles.stateCard}>
               <ActivityIndicator color={palette.highlight} size="large" />
               <Text style={styles.stateTitle}>Loading districts</Text>
@@ -384,6 +384,14 @@ export function StreetGuesserScreen() {
                   </View>
                 ) : null}
               </View>
+            </View>
+          ) : !session ? (
+            <View style={styles.stateCard}>
+              <ActivityIndicator color={palette.highlight} size="large" />
+              <Text style={styles.stateTitle}>Preparing {selectedCity.name}</Text>
+              <Text style={styles.stateBody}>
+                Building the first route set for {selectedCity.name}.
+              </Text>
             </View>
           ) : isFinished ? (
             <View style={styles.summaryCard}>
