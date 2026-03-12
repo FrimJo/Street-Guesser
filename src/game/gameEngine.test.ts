@@ -1,6 +1,6 @@
 import { describe, expect, it } from '@jest/globals';
 
-import { STREET_PACKS } from '../data/streetPacks';
+import { getCityOptions, STREET_PACKS } from '../data/streetPacks';
 import { buildQuizSession, scoreGuess } from './gameEngine';
 
 function sequenceRandom(values: number[]) {
@@ -33,6 +33,16 @@ describe('buildQuizSession', () => {
       const optionIds = new Set(question.options.map((option) => option.id));
       expect(optionIds.size).toBe(4);
     }
+  });
+});
+
+describe('getCityOptions', () => {
+  it('returns each city once in alphabetical order', () => {
+    expect(getCityOptions(STREET_PACKS)).toEqual([
+      { id: 'new-york-city', name: 'New York City' },
+      { id: 'san-francisco', name: 'San Francisco' },
+      { id: 'tokyo', name: 'Tokyo' },
+    ]);
   });
 });
 

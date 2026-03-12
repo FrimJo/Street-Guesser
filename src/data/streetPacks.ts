@@ -11,14 +11,23 @@ export type Street = {
 
 export type District = {
   id: string;
+  cityId: string;
+  cityName: string;
   name: string;
   accent: string;
   streets: Street[];
 };
 
+export type CityOption = {
+  id: string;
+  name: string;
+};
+
 export const STREET_PACKS: District[] = [
   {
     id: 'soho-manhattan',
+    cityId: 'new-york-city',
+    cityName: 'New York City',
     name: 'SoHo, Manhattan',
     accent: '#ff7b5c',
     streets: [
@@ -86,6 +95,8 @@ export const STREET_PACKS: District[] = [
   },
   {
     id: 'west-village',
+    cityId: 'new-york-city',
+    cityName: 'New York City',
     name: 'West Village',
     accent: '#5eb8ff',
     streets: [
@@ -153,6 +164,8 @@ export const STREET_PACKS: District[] = [
   },
   {
     id: 'russian-hill',
+    cityId: 'san-francisco',
+    cityName: 'San Francisco',
     name: 'Russian Hill',
     accent: '#5fd3b6',
     streets: [
@@ -220,6 +233,8 @@ export const STREET_PACKS: District[] = [
   },
   {
     id: 'shibuya-center',
+    cityId: 'tokyo',
+    cityName: 'Tokyo',
     name: 'Shibuya Center',
     accent: '#f5b44a',
     streets: [
@@ -291,4 +306,17 @@ export async function fetchStreetPacks(): Promise<District[]> {
   await new Promise((resolve) => setTimeout(resolve, 180));
 
   return STREET_PACKS;
+}
+
+export function getCityOptions(districts: District[]): CityOption[] {
+  const cities = new Map<string, CityOption>();
+
+  for (const district of districts) {
+    cities.set(district.cityId, {
+      id: district.cityId,
+      name: district.cityName,
+    });
+  }
+
+  return [...cities.values()].sort((left, right) => left.name.localeCompare(right.name));
 }
