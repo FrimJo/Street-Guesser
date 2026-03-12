@@ -46,15 +46,14 @@ export const mapCardStyles = StyleSheet.create({
     borderRadius: 28,
     borderWidth: 1,
     borderColor: palette.border,
-    padding: 22,
-    gap: 18,
+    padding: 18,
+    gap: 16,
     backgroundColor: '#0d1826',
     ...shadowCard,
   },
   header: {
     alignItems: 'flex-start',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    flexDirection: 'column',
     gap: 12,
   },
   eyebrow: {
@@ -67,13 +66,13 @@ export const mapCardStyles = StyleSheet.create({
   title: {
     color: palette.text,
     fontFamily: displayFont,
-    fontSize: 26,
-    lineHeight: 29,
+    fontSize: 22,
+    lineHeight: 26,
     marginTop: 6,
   },
   legendBadge: {
     alignItems: 'center',
-    alignSelf: 'center',
+    alignSelf: 'flex-start',
     borderRadius: 999,
     borderWidth: 1,
     flexDirection: 'row',
@@ -92,7 +91,7 @@ export const mapCardStyles = StyleSheet.create({
     fontWeight: '700',
   },
   mapFrame: {
-    aspectRatio: 1,
+    aspectRatio: 0.92,
     backgroundColor: 'rgba(255,255,255,0.02)',
     borderRadius: 24,
     overflow: 'hidden',
@@ -104,7 +103,7 @@ export const mapCardStyles = StyleSheet.create({
   },
   fallbackWrap: {
     alignItems: 'center',
-    aspectRatio: 1,
+    aspectRatio: 0.92,
     backgroundColor: '#0f1e31',
     borderRadius: 24,
     gap: 10,

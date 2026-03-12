@@ -172,7 +172,9 @@ function getFilteredCities(cities: CityOption[], query: string) {
 
 export function StreetGuesserScreen() {
   const { width } = useWindowDimensions();
-  const isWide = width >= 980;
+  const isTablet = width >= 768;
+  const isDesktop = width >= 1100;
+  const isCompact = width < 420;
 
   const [gameState, dispatch] = useReducer(gameReducer, initialGameState);
   const [selectedCityId, setSelectedCityId] = useState<string | null>(null);
@@ -292,27 +294,41 @@ export function StreetGuesserScreen() {
       <View style={styles.bottomGlow} />
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        <View style={styles.shell}>
-          <View style={styles.heroCard}>
+        <View style={[styles.shell, isTablet ? styles.shellTablet : null]}>
+          <View style={[styles.heroCard, isTablet ? styles.heroCardTablet : null]}>
             <Text style={styles.heroEyebrow}>Street Guesser</Text>
-            <Text style={styles.heroTitle}>
+            <Text
+              style={[
+                styles.heroTitle,
+                isCompact ? styles.heroTitleCompact : null,
+                isTablet ? styles.heroTitleTablet : null,
+              ]}
+            >
               Guess highlighted streets on unlabeled maps across web, iPhone, and Android.
             </Text>
-            <Text style={styles.heroBody}>
+            <Text style={[styles.heroBody, isTablet ? styles.heroBodyTablet : null]}>
               Pick a city first, then work through its districts. Streets stay anonymous, one route
               lights up, and your streak depends on naming it before the map slips away.
             </Text>
 
-            <View style={styles.statGrid}>
-              <StatPill label="Score" value={score.toString()} />
-              <StatPill label="Streak" value={streak.toString()} />
-              <StatPill label="Best run" value={bestStreak.toString()} />
-              <StatPill label="Accuracy" value={`${accuracy}%`} />
+            <View style={[styles.statGrid, isTablet ? styles.statGridTablet : null]}>
+              <View style={[styles.statCell, isTablet ? styles.statCellTablet : null]}>
+                <StatPill label="Score" value={score.toString()} />
+              </View>
+              <View style={[styles.statCell, isTablet ? styles.statCellTablet : null]}>
+                <StatPill label="Streak" value={streak.toString()} />
+              </View>
+              <View style={[styles.statCell, isTablet ? styles.statCellTablet : null]}>
+                <StatPill label="Best run" value={bestStreak.toString()} />
+              </View>
+              <View style={[styles.statCell, isTablet ? styles.statCellTablet : null]}>
+                <StatPill label="Accuracy" value={`${accuracy}%`} />
+              </View>
             </View>
           </View>
 
           {districtsQuery.isError ? (
-            <View style={styles.stateCard}>
+            <View style={[styles.stateCard, isTablet ? styles.stateCardTablet : null]}>
               <Text style={styles.stateTitle}>Map data stalled</Text>
               <Text style={styles.stateBody}>
                 The local street packs could not be loaded. Try rebuilding the route set.
@@ -321,6 +337,8 @@ export function StreetGuesserScreen() {
                 onPress={() => districtsQuery.refetch()}
                 style={({ pressed }) => [
                   styles.primaryAction,
+                  styles.actionFullWidth,
+                  isTablet ? styles.actionAutoWidth : null,
                   pressed ? styles.actionPressed : null,
                 ]}
               >
@@ -328,7 +346,7 @@ export function StreetGuesserScreen() {
               </Pressable>
             </View>
           ) : districtsQuery.isLoading ? (
-            <View style={styles.stateCard}>
+            <View style={[styles.stateCard, isTablet ? styles.stateCardTablet : null]}>
               <ActivityIndicator color={palette.highlight} size="large" />
               <Text style={styles.stateTitle}>Loading districts</Text>
               <Text style={styles.stateBody}>
@@ -336,9 +354,17 @@ export function StreetGuesserScreen() {
               </Text>
             </View>
           ) : !selectedCity ? (
-            <View style={styles.selectorCard}>
+            <View style={[styles.selectorCard, isTablet ? styles.selectorCardTablet : null]}>
               <Text style={styles.selectorEyebrow}>Choose a city</Text>
-              <Text style={styles.selectorTitle}>Start by selecting where the quiz should happen.</Text>
+              <Text
+                style={[
+                  styles.selectorTitle,
+                  isCompact ? styles.selectorTitleCompact : null,
+                  isTablet ? styles.selectorTitleTablet : null,
+                ]}
+              >
+                Start by selecting where the quiz should happen.
+              </Text>
               <Text style={styles.selectorBody}>
                 Search for a city name and choose it from the dropdown before the first map appears.
               </Text>
@@ -386,7 +412,7 @@ export function StreetGuesserScreen() {
               </View>
             </View>
           ) : !session ? (
-            <View style={styles.stateCard}>
+            <View style={[styles.stateCard, isTablet ? styles.stateCardTablet : null]}>
               <ActivityIndicator color={palette.highlight} size="large" />
               <Text style={styles.stateTitle}>Preparing {selectedCity.name}</Text>
               <Text style={styles.stateBody}>
@@ -394,9 +420,15 @@ export function StreetGuesserScreen() {
               </Text>
             </View>
           ) : isFinished ? (
-            <View style={styles.summaryCard}>
+            <View style={[styles.summaryCard, isTablet ? styles.summaryCardTablet : null]}>
               <Text style={styles.summaryEyebrow}>Session complete</Text>
-              <Text style={styles.summaryTitle}>
+              <Text
+                style={[
+                  styles.summaryTitle,
+                  isCompact ? styles.summaryTitleCompact : null,
+                  isTablet ? styles.summaryTitleTablet : null,
+                ]}
+              >
                 You named {correctCount} of {totalQuestions} streets in {selectedCity.name}.
               </Text>
               <Text style={styles.summaryBody}>
@@ -405,11 +437,13 @@ export function StreetGuesserScreen() {
                   ? 'You know this city.'
                   : 'One more lap and these districts will stick.'}
               </Text>
-              <View style={styles.actionRow}>
+              <View style={[styles.actionRow, isTablet ? styles.actionRowTablet : null]}>
                 <Pressable
                   onPress={resetCitySelection}
                   style={({ pressed }) => [
                     styles.secondaryAction,
+                    styles.actionFullWidth,
+                    isTablet ? styles.actionAutoWidth : null,
                     pressed ? styles.actionPressed : null,
                   ]}
                 >
@@ -419,6 +453,8 @@ export function StreetGuesserScreen() {
                   onPress={startFreshSession}
                   style={({ pressed }) => [
                     styles.primaryAction,
+                    styles.actionFullWidth,
+                    isTablet ? styles.actionAutoWidth : null,
                     pressed ? styles.actionPressed : null,
                   ]}
                 >
@@ -427,7 +463,7 @@ export function StreetGuesserScreen() {
               </View>
             </View>
           ) : currentQuestion ? (
-            <View style={[styles.playArea, isWide ? styles.playAreaWide : null]}>
+            <View style={[styles.playArea, isDesktop ? styles.playAreaWide : null]}>
               <View style={styles.mapColumn}>
                 <MapCard
                   accent={currentQuestion.districtAccent}
@@ -438,11 +474,19 @@ export function StreetGuesserScreen() {
               </View>
 
               <View style={styles.sidebar}>
-                <View style={styles.questionCard}>
+                <View style={[styles.questionCard, isTablet ? styles.questionCardTablet : null]}>
                   <Text style={styles.questionEyebrow}>
                     Round {questionIndex + 1} / {session.questions.length}
                   </Text>
-                  <Text style={styles.questionTitle}>Which street is glowing?</Text>
+                  <Text
+                    style={[
+                      styles.questionTitle,
+                      isCompact ? styles.questionTitleCompact : null,
+                      isTablet ? styles.questionTitleTablet : null,
+                    ]}
+                  >
+                    Which street is glowing?
+                  </Text>
                   <Text style={styles.questionBody}>
                     Study the map, ignore the missing labels, and pick the street name that matches
                     the highlighted route in {currentQuestion.districtName}.
@@ -474,11 +518,13 @@ export function StreetGuesserScreen() {
                     </View>
                   ) : null}
 
-                  <View style={styles.actionRow}>
+                  <View style={[styles.actionRow, isTablet ? styles.actionRowTablet : null]}>
                     <Pressable
                       onPress={resetCitySelection}
                       style={({ pressed }) => [
                         styles.secondaryAction,
+                        styles.actionFullWidth,
+                        isTablet ? styles.actionAutoWidth : null,
                         pressed ? styles.actionPressed : null,
                       ]}
                     >
@@ -490,6 +536,8 @@ export function StreetGuesserScreen() {
                         onPress={handleAdvance}
                         style={({ pressed }) => [
                           styles.primaryAction,
+                          styles.actionFullWidth,
+                          isTablet ? styles.actionAutoWidth : null,
                           pressed ? styles.actionPressed : null,
                         ]}
                       >
@@ -515,6 +563,8 @@ const styles = StyleSheet.create({
   root: {
     flex: 1,
     backgroundColor: palette.backgroundStart,
+    minHeight: '100%',
+    width: '100%',
   },
   topGlow: {
     position: 'absolute',
@@ -535,23 +585,31 @@ const styles = StyleSheet.create({
     borderRadius: 999,
   },
   scrollContent: {
+    flexGrow: 1,
     paddingHorizontal: 16,
-    paddingVertical: 32,
+    paddingVertical: 20,
   },
   shell: {
     alignSelf: 'center',
-    gap: 20,
+    gap: 16,
     maxWidth: 1180,
     width: '100%',
+  },
+  shellTablet: {
+    gap: 20,
   },
   heroCard: {
     backgroundColor: 'rgba(255,255,255,0.05)',
     borderRadius: 32,
     borderWidth: 1,
     borderColor: palette.border,
+    gap: 16,
+    padding: 20,
+    ...shadowCard,
+  },
+  heroCardTablet: {
     gap: 18,
     padding: 24,
-    ...shadowCard,
   },
   heroEyebrow: {
     color: palette.textMuted,
@@ -563,11 +621,23 @@ const styles = StyleSheet.create({
   heroTitle: {
     color: palette.text,
     fontFamily: displayFont,
+    fontSize: 28,
+    lineHeight: 32,
+  },
+  heroTitleCompact: {
+    fontSize: 24,
+    lineHeight: 28,
+  },
+  heroTitleTablet: {
     fontSize: 36,
     lineHeight: 40,
   },
   heroBody: {
     color: palette.textMuted,
+    fontSize: 15,
+    lineHeight: 22,
+  },
+  heroBodyTablet: {
     fontSize: 16,
     lineHeight: 24,
     maxWidth: 820,
@@ -575,7 +645,21 @@ const styles = StyleSheet.create({
   statGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
+    gap: 10,
+    marginHorizontal: -5,
+  },
+  statGridTablet: {
     gap: 12,
+    marginHorizontal: -6,
+  },
+  statCell: {
+    paddingHorizontal: 5,
+    width: '50%',
+  },
+  statCellTablet: {
+    minWidth: 112,
+    paddingHorizontal: 6,
+    width: 'auto',
   },
   statPill: {
     backgroundColor: palette.panelMuted,
@@ -606,13 +690,17 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: palette.border,
     gap: 12,
+    padding: 20,
+    ...shadowCard,
+  },
+  stateCardTablet: {
     padding: 28,
     ...shadowCard,
   },
   stateTitle: {
     color: palette.text,
     fontFamily: displayFont,
-    fontSize: 28,
+    fontSize: 24,
     textAlign: 'center',
   },
   stateBody: {
@@ -627,6 +715,11 @@ const styles = StyleSheet.create({
     borderRadius: 30,
     borderWidth: 1,
     borderColor: palette.border,
+    gap: 16,
+    padding: 20,
+    ...shadowCard,
+  },
+  selectorCardTablet: {
     gap: 18,
     padding: 28,
     ...shadowCard,
@@ -641,6 +734,14 @@ const styles = StyleSheet.create({
   selectorTitle: {
     color: palette.text,
     fontFamily: displayFont,
+    fontSize: 26,
+    lineHeight: 30,
+  },
+  selectorTitleCompact: {
+    fontSize: 24,
+    lineHeight: 28,
+  },
+  selectorTitleTablet: {
     fontSize: 32,
     lineHeight: 36,
     maxWidth: 720,
@@ -705,11 +806,12 @@ const styles = StyleSheet.create({
     fontSize: 15,
   },
   playArea: {
-    gap: 20,
+    gap: 16,
   },
   playAreaWide: {
     alignItems: 'stretch',
     flexDirection: 'row',
+    gap: 20,
   },
   mapColumn: {
     flex: 1.1,
@@ -722,6 +824,11 @@ const styles = StyleSheet.create({
     borderRadius: 28,
     borderWidth: 1,
     borderColor: palette.border,
+    gap: 16,
+    padding: 18,
+    ...shadowCard,
+  },
+  questionCardTablet: {
     gap: 20,
     padding: 22,
     ...shadowCard,
@@ -736,6 +843,14 @@ const styles = StyleSheet.create({
   questionTitle: {
     color: palette.text,
     fontFamily: displayFont,
+    fontSize: 24,
+    lineHeight: 28,
+  },
+  questionTitleCompact: {
+    fontSize: 22,
+    lineHeight: 26,
+  },
+  questionTitleTablet: {
     fontSize: 30,
     lineHeight: 34,
   },
@@ -772,9 +887,12 @@ const styles = StyleSheet.create({
     lineHeight: 21,
   },
   actionRow: {
+    flexDirection: 'column',
+    gap: 12,
+  },
+  actionRowTablet: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 12,
     justifyContent: 'space-between',
   },
   primaryAction: {
@@ -786,6 +904,12 @@ const styles = StyleSheet.create({
     minWidth: 160,
     paddingHorizontal: 20,
     paddingVertical: 14,
+  },
+  actionFullWidth: {
+    width: '100%',
+  },
+  actionAutoWidth: {
+    width: 'auto',
   },
   primaryActionLabel: {
     color: '#241406',
@@ -818,6 +942,11 @@ const styles = StyleSheet.create({
     borderRadius: 30,
     borderWidth: 1,
     borderColor: palette.border,
+    gap: 14,
+    padding: 20,
+    ...shadowCard,
+  },
+  summaryCardTablet: {
     gap: 16,
     padding: 28,
     ...shadowCard,
@@ -832,6 +961,14 @@ const styles = StyleSheet.create({
   summaryTitle: {
     color: palette.text,
     fontFamily: displayFont,
+    fontSize: 28,
+    lineHeight: 32,
+  },
+  summaryTitleCompact: {
+    fontSize: 24,
+    lineHeight: 28,
+  },
+  summaryTitleTablet: {
     fontSize: 34,
     lineHeight: 38,
   },
