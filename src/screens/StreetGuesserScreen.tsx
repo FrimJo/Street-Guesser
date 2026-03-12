@@ -2,21 +2,29 @@ import { useQuery } from '@tanstack/react-query';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
   ActivityIndicator,
+  Platform,
   Pressable,
   ScrollView,
+  StatusBar as RNStatusBar,
   StyleSheet,
   Text,
-  TextInput,
   View,
   useWindowDimensions,
 } from 'react-native';
 import { useEffect, useReducer, useState } from 'react';
 
+import { CityPicker } from '../components/CityPicker';
 import { MapCard } from '../components/MapCard';
+import { ProgressHeader } from '../components/ProgressHeader';
 import { QuizOption } from '../components/QuizOption';
-import { fetchStreetPacks, getCityOptions, type CityOption, type District } from '../data/streetPacks';
+import {
+  fetchStreetPacks,
+  getCityOptions,
+  type CityOption,
+  type District,
+} from '../data/streetPacks';
 import { buildQuizSession, scoreGuess, type QuizSession } from '../game/gameEngine';
-import { displayFont, palette, shadowCard } from '../theme';
+import { fontFamily, fontSize, palette, radius, shadows, spacing } from '../theme';
 
 const SESSION_LENGTH = 8;
 
@@ -33,20 +41,10 @@ type GameState = {
 };
 
 type GameAction =
-  | {
-      type: 'startSession';
-      session: QuizSession;
-    }
-  | {
-      type: 'reset';
-    }
-  | {
-      type: 'guess';
-      optionId: string;
-    }
-  | {
-      type: 'advance';
-    };
+  | { type: 'startSession'; session: QuizSession }
+  | { type: 'reset' }
+  | { type: 'guess'; optionId: string }
+  | { type: 'advance' };
 
 const initialGameState: GameState = {
   session: null,
@@ -111,15 +109,6 @@ function gameReducer(state: GameState, action: GameAction): GameState {
   }
 }
 
-function StatPill({ label, value }: { label: string; value: string }) {
-  return (
-    <View style={styles.statPill}>
-      <Text style={styles.statLabel}>{label}</Text>
-      <Text style={styles.statValue}>{value}</Text>
-    </View>
-  );
-}
-
 function normalizeSearchValue(value: string) {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, '');
 }
@@ -172,7 +161,9 @@ function getFilteredCities(cities: CityOption[], query: string) {
 
 export function StreetGuesserScreen() {
   const { width } = useWindowDimensions();
-  const isWide = width >= 980;
+  const isWide = width >= 820;
+  const statusBarHeight = Platform.OS === 'android' ? (RNStatusBar.currentHeight ?? 0) : 0;
+  const topPadding = Platform.OS === 'web' ? 0 : Math.max(statusBarHeight, 44);
 
   const [gameState, dispatch] = useReducer(gameReducer, initialGameState);
   const [selectedCityId, setSelectedCityId] = useState<string | null>(null);
@@ -189,7 +180,9 @@ export function StreetGuesserScreen() {
       return;
     }
 
-    const selectedDistricts = districtsQuery.data.filter((district) => district.cityId === selectedCityId);
+    const selectedDistricts = districtsQuery.data.filter(
+      (district) => district.cityId === selectedCityId,
+    );
 
     if (selectedDistricts.length === 0) {
       return;
@@ -255,590 +248,759 @@ export function StreetGuesserScreen() {
   }
 
   function handleGuess(optionId: string) {
-    dispatch({
-      type: 'guess',
-      optionId,
-    });
+    dispatch({ type: 'guess', optionId });
   }
 
   function handleAdvance() {
-    dispatch({
-      type: 'advance',
-    });
+    dispatch({ type: 'advance' });
   }
 
   const totalQuestions = session?.questions.length ?? SESSION_LENGTH;
   const accuracy = totalQuestions > 0 ? Math.round((correctCount / totalQuestions) * 100) : 0;
+
   const feedbackTitle =
     answerState === 'correct'
-      ? 'Pinned it.'
+      ? 'Correct!'
       : answerState === 'incorrect'
-        ? 'Close, but not this route.'
+        ? 'Not quite'
         : null;
   const feedbackBody =
     answerState === 'correct'
-      ? `+${roundDelta} points. ${currentQuestion?.streetName} is now part of your mental map.`
+      ? `+${roundDelta} pts — ${currentQuestion?.streetName} locked in.`
       : answerState === 'incorrect'
-        ? `The highlighted route was ${currentQuestion?.streetName}. Take another look before you move on.`
+        ? `It was ${currentQuestion?.streetName}.`
         : null;
 
+  // -- Error ---
+  if (districtsQuery.isError) {
+    return (
+      <View style={[styles.root, { paddingTop: topPadding }]}>
+        <LinearGradient
+          colors={[palette.bg, '#0a1628', palette.bg]}
+          style={StyleSheet.absoluteFill}
+        />
+        <View style={styles.centerContent}>
+          <View style={styles.stateCard}>
+            <Text style={styles.stateIcon}>!</Text>
+            <Text style={styles.stateTitle}>Something went wrong</Text>
+            <Text style={styles.stateBody}>Could not load street data. Try again.</Text>
+            <Pressable
+              onPress={() => districtsQuery.refetch()}
+              style={({ pressed }) => [styles.btnPrimary, pressed ? styles.btnActive : null]}
+            >
+              <Text style={styles.btnPrimaryLabel}>Retry</Text>
+            </Pressable>
+          </View>
+        </View>
+      </View>
+    );
+  }
+
+  // -- Loading ---
+  if (districtsQuery.isLoading) {
+    return (
+      <View style={[styles.root, { paddingTop: topPadding }]}>
+        <LinearGradient
+          colors={[palette.bg, '#0a1628', palette.bg]}
+          style={StyleSheet.absoluteFill}
+        />
+        <View style={styles.centerContent}>
+          <ActivityIndicator color={palette.accent} size="large" />
+          <Text style={[styles.stateBody, { marginTop: spacing.lg }]}>Loading streets...</Text>
+        </View>
+      </View>
+    );
+  }
+
+  // -- Landing / City Select ---
+  if (!selectedCity) {
+    return (
+      <View style={[styles.root, { paddingTop: topPadding }]}>
+        <LinearGradient
+          colors={[palette.bg, '#0d1f35', '#081420', palette.bg]}
+          locations={[0, 0.35, 0.7, 1]}
+          style={StyleSheet.absoluteFill}
+        />
+        <View style={styles.glowTopRight} />
+        <View style={styles.glowBottomLeft} />
+
+        <ScrollView
+          contentContainerStyle={styles.landingContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.landingInner}>
+            <View style={styles.brandRow}>
+              <View style={styles.brandDot} />
+              <Text style={styles.brandLabel}>Street Guesser</Text>
+            </View>
+
+            <Text style={styles.landingHeading}>
+              Can you name{'\n'}the road?
+            </Text>
+            <Text style={styles.landingBody}>
+              Pick a city, study the unlabeled map, and identify the highlighted street. Test your
+              knowledge or practice for the real thing.
+            </Text>
+
+            <View style={styles.cityPickerWrap}>
+              <Text style={styles.fieldLabel}>Choose a city</Text>
+              <CityPicker
+                cities={filteredCities}
+                isOpen={isCityDropdownOpen}
+                onChangeSearch={setCitySearchValue}
+                onClose={() => setIsCityDropdownOpen(false)}
+                onOpen={() => setIsCityDropdownOpen(true)}
+                onSelect={handleCitySelect}
+                searchValue={citySearchValue}
+              />
+            </View>
+
+            <View style={styles.landingDivider} />
+
+            <View style={styles.landingHints}>
+              <Text style={styles.hintsTitle}>How it works</Text>
+              <HintRow number="1" text="Pick a city to begin your session" />
+              <HintRow number="2" text="Study the map — labels are hidden" />
+              <HintRow number="3" text="Select the correct street name" />
+              <HintRow number="4" text="Build your streak and beat your score" />
+            </View>
+          </View>
+        </ScrollView>
+      </View>
+    );
+  }
+
+  // -- Preparing session ---
+  if (!session) {
+    return (
+      <View style={[styles.root, { paddingTop: topPadding }]}>
+        <LinearGradient
+          colors={[palette.bg, '#0a1628', palette.bg]}
+          style={StyleSheet.absoluteFill}
+        />
+        <View style={styles.centerContent}>
+          <ActivityIndicator color={palette.accent} size="large" />
+          <Text style={[styles.stateBody, { marginTop: spacing.lg }]}>
+            Preparing {selectedCity.name}...
+          </Text>
+        </View>
+      </View>
+    );
+  }
+
+  // -- Results ---
+  if (isFinished) {
+    const grade =
+      accuracy >= 90
+        ? 'Outstanding!'
+        : accuracy >= 75
+          ? 'Great job!'
+          : accuracy >= 50
+            ? 'Not bad!'
+            : 'Keep practicing';
+
+    const gradeColor =
+      accuracy >= 75 ? palette.success : accuracy >= 50 ? palette.warning : palette.textSecondary;
+
+    return (
+      <View style={[styles.root, { paddingTop: topPadding }]}>
+        <LinearGradient
+          colors={[palette.bg, '#0d1f35', palette.bg]}
+          style={StyleSheet.absoluteFill}
+        />
+        <ScrollView
+          contentContainerStyle={styles.resultsContent}
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.resultsInner}>
+            <Text style={styles.resultsEyebrow}>Session complete</Text>
+            <Text style={[styles.resultsHeading, { color: gradeColor }]}>{grade}</Text>
+            <Text style={styles.resultsCity}>{selectedCity.name}</Text>
+
+            <View style={styles.resultsGrid}>
+              <ResultStat label="Score" value={score.toString()} />
+              <ResultStat label="Correct" value={`${correctCount}/${totalQuestions}`} />
+              <ResultStat label="Accuracy" value={`${accuracy}%`} />
+              <ResultStat label="Best streak" value={bestStreak.toString()} />
+            </View>
+
+            <View style={styles.resultsActions}>
+              <Pressable
+                onPress={startFreshSession}
+                style={({ pressed }) => [
+                  styles.btnPrimary,
+                  styles.btnFull,
+                  pressed ? styles.btnActive : null,
+                ]}
+              >
+                <Text style={styles.btnPrimaryLabel}>Play again</Text>
+              </Pressable>
+              <Pressable
+                onPress={resetCitySelection}
+                style={({ pressed }) => [
+                  styles.btnSecondary,
+                  styles.btnFull,
+                  pressed ? styles.btnActive : null,
+                ]}
+              >
+                <Text style={styles.btnSecondaryLabel}>Change city</Text>
+              </Pressable>
+            </View>
+          </View>
+        </ScrollView>
+      </View>
+    );
+  }
+
+  // -- Gameplay ---
+  if (!currentQuestion) {
+    return null;
+  }
+
+  const isLastQuestion = questionIndex + 1 === session.questions.length;
+
   return (
-    <View style={styles.root}>
-      <LinearGradient
-        colors={[palette.backgroundStart, '#10233a', palette.backgroundEnd]}
-        style={StyleSheet.absoluteFill}
-      />
-      <View style={styles.topGlow} />
-      <View style={styles.bottomGlow} />
-
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        <View style={styles.shell}>
-          <View style={styles.heroCard}>
-            <Text style={styles.heroEyebrow}>Street Guesser</Text>
-            <Text style={styles.heroTitle}>
-              Guess highlighted streets on unlabeled maps across web, iPhone, and Android.
-            </Text>
-            <Text style={styles.heroBody}>
-              Pick a city first, then work through its districts. Streets stay anonymous, one route
-              lights up, and your streak depends on naming it before the map slips away.
-            </Text>
-
-            <View style={styles.statGrid}>
-              <StatPill label="Score" value={score.toString()} />
-              <StatPill label="Streak" value={streak.toString()} />
-              <StatPill label="Best run" value={bestStreak.toString()} />
-              <StatPill label="Accuracy" value={`${accuracy}%`} />
+    <View style={[styles.root, { paddingTop: topPadding }]}>
+      {isWide ? (
+        <View style={styles.wideRoot}>
+          <View style={styles.wideMapCol}>
+            <View style={styles.wideProgressWrap}>
+              <ProgressHeader
+                current={questionIndex + 1}
+                districtName={currentQuestion.districtName}
+                score={score}
+                streak={streak}
+                total={totalQuestions}
+              />
+            </View>
+            <View style={styles.wideMapWrap}>
+              <MapCard
+                accent={currentQuestion.districtAccent}
+                answerId={currentQuestion.answerId}
+                districtName={currentQuestion.districtName}
+                streets={currentQuestion.streets}
+              />
             </View>
           </View>
 
-          {districtsQuery.isError ? (
-            <View style={styles.stateCard}>
-              <Text style={styles.stateTitle}>Map data stalled</Text>
-              <Text style={styles.stateBody}>
-                The local street packs could not be loaded. Try rebuilding the route set.
-              </Text>
-              <Pressable
-                onPress={() => districtsQuery.refetch()}
-                style={({ pressed }) => [
-                  styles.primaryAction,
-                  pressed ? styles.actionPressed : null,
+          <ScrollView
+            contentContainerStyle={styles.wideSidebar}
+            showsVerticalScrollIndicator={false}
+          >
+            <Text style={styles.questionTitle}>Which street is highlighted?</Text>
+
+            <View style={styles.optionList}>
+              {currentQuestion.options.map((option, index) => (
+                <QuizOption
+                  key={option.id}
+                  answered={Boolean(answerState)}
+                  index={index}
+                  isCorrectOption={option.id === currentQuestion.answerId}
+                  label={option.label}
+                  onPress={() => handleGuess(option.id)}
+                  selected={selectedOptionId === option.id}
+                />
+              ))}
+            </View>
+
+            {feedbackTitle && feedbackBody ? (
+              <View
+                style={[
+                  styles.feedback,
+                  answerState === 'correct' ? styles.feedbackCorrect : styles.feedbackWrong,
                 ]}
               >
-                <Text style={styles.primaryActionLabel}>Retry</Text>
+                <Text style={styles.feedbackTitle}>{feedbackTitle}</Text>
+                <Text style={styles.feedbackBody}>{feedbackBody}</Text>
+              </View>
+            ) : null}
+
+            <View style={styles.gameActions}>
+              {answerState ? (
+                <Pressable
+                  onPress={handleAdvance}
+                  style={({ pressed }) => [
+                    styles.btnPrimary,
+                    styles.btnFull,
+                    pressed ? styles.btnActive : null,
+                  ]}
+                >
+                  <Text style={styles.btnPrimaryLabel}>
+                    {isLastQuestion ? 'See results' : 'Next'}
+                  </Text>
+                </Pressable>
+              ) : null}
+              <Pressable
+                onPress={resetCitySelection}
+                style={({ pressed }) => [styles.btnGhost, pressed ? styles.btnActive : null]}
+              >
+                <Text style={styles.btnGhostLabel}>Change city</Text>
               </Pressable>
             </View>
-          ) : districtsQuery.isLoading ? (
-            <View style={styles.stateCard}>
-              <ActivityIndicator color={palette.highlight} size="large" />
-              <Text style={styles.stateTitle}>Loading districts</Text>
-              <Text style={styles.stateBody}>
-                Loading city routes and preparing the selector.
-              </Text>
-            </View>
-          ) : !selectedCity ? (
-            <View style={styles.selectorCard}>
-              <Text style={styles.selectorEyebrow}>Choose a city</Text>
-              <Text style={styles.selectorTitle}>Start by selecting where the quiz should happen.</Text>
-              <Text style={styles.selectorBody}>
-                Search for a city name and choose it from the dropdown before the first map appears.
-              </Text>
-
-              <View style={styles.selectorFieldWrap}>
-                <Text style={styles.selectorLabel}>City</Text>
-                <TextInput
-                  autoCapitalize="words"
-                  autoCorrect={false}
-                  onBlur={() => {
-                    setTimeout(() => setIsCityDropdownOpen(false), 120);
-                  }}
-                  onChangeText={(value) => {
-                    setCitySearchValue(value);
-                    setIsCityDropdownOpen(true);
-                  }}
-                  onFocus={() => setIsCityDropdownOpen(true)}
-                  placeholder="Search cities"
-                  placeholderTextColor={palette.textSoft}
-                  style={styles.selectorInput}
-                  value={citySearchValue}
-                />
-                {isCityDropdownOpen ? (
-                  <View style={styles.dropdownMenu}>
-                    {filteredCities.length > 0 ? (
-                      filteredCities.map((city) => (
-                        <Pressable
-                          key={city.id}
-                          onPress={() => handleCitySelect(city)}
-                          style={({ pressed }) => [
-                            styles.dropdownOption,
-                            pressed ? styles.dropdownOptionPressed : null,
-                          ]}
-                        >
-                          <Text style={styles.dropdownOptionLabel}>{city.name}</Text>
-                        </Pressable>
-                      ))
-                    ) : (
-                      <View style={styles.dropdownEmpty}>
-                        <Text style={styles.dropdownEmptyLabel}>No city matches that search.</Text>
-                      </View>
-                    )}
-                  </View>
-                ) : null}
-              </View>
-            </View>
-          ) : !session ? (
-            <View style={styles.stateCard}>
-              <ActivityIndicator color={palette.highlight} size="large" />
-              <Text style={styles.stateTitle}>Preparing {selectedCity.name}</Text>
-              <Text style={styles.stateBody}>
-                Building the first route set for {selectedCity.name}.
-              </Text>
-            </View>
-          ) : isFinished ? (
-            <View style={styles.summaryCard}>
-              <Text style={styles.summaryEyebrow}>Session complete</Text>
-              <Text style={styles.summaryTitle}>
-                You named {correctCount} of {totalQuestions} streets in {selectedCity.name}.
-              </Text>
-              <Text style={styles.summaryBody}>
-                Final score: {score}. Best streak: {bestStreak}.{' '}
-                {accuracy >= 75
-                  ? 'You know this city.'
-                  : 'One more lap and these districts will stick.'}
-              </Text>
-              <View style={styles.actionRow}>
-                <Pressable
-                  onPress={resetCitySelection}
-                  style={({ pressed }) => [
-                    styles.secondaryAction,
-                    pressed ? styles.actionPressed : null,
-                  ]}
-                >
-                  <Text style={styles.secondaryActionLabel}>Change city</Text>
-                </Pressable>
-                <Pressable
-                  onPress={startFreshSession}
-                  style={({ pressed }) => [
-                    styles.primaryAction,
-                    pressed ? styles.actionPressed : null,
-                  ]}
-                >
-                  <Text style={styles.primaryActionLabel}>Play another route set</Text>
-                </Pressable>
-              </View>
-            </View>
-          ) : currentQuestion ? (
-            <View style={[styles.playArea, isWide ? styles.playAreaWide : null]}>
-              <View style={styles.mapColumn}>
-                <MapCard
-                  accent={currentQuestion.districtAccent}
-                  answerId={currentQuestion.answerId}
-                  districtName={currentQuestion.districtName}
-                  streets={currentQuestion.streets}
-                />
-              </View>
-
-              <View style={styles.sidebar}>
-                <View style={styles.questionCard}>
-                  <Text style={styles.questionEyebrow}>
-                    Round {questionIndex + 1} / {session.questions.length}
-                  </Text>
-                  <Text style={styles.questionTitle}>Which street is glowing?</Text>
-                  <Text style={styles.questionBody}>
-                    Study the map, ignore the missing labels, and pick the street name that matches
-                    the highlighted route in {currentQuestion.districtName}.
-                  </Text>
-
-                  <View style={styles.optionList}>
-                    {currentQuestion.options.map((option, index) => (
-                      <QuizOption
-                        key={option.id}
-                        answered={Boolean(answerState)}
-                        index={index}
-                        isCorrectOption={option.id === currentQuestion.answerId}
-                        label={option.label}
-                        onPress={() => handleGuess(option.id)}
-                        selected={selectedOptionId === option.id}
-                      />
-                    ))}
-                  </View>
-
-                  {feedbackTitle && feedbackBody ? (
-                    <View
-                      style={[
-                        styles.feedbackCard,
-                        answerState === 'correct' ? styles.feedbackCorrect : styles.feedbackWrong,
-                      ]}
-                    >
-                      <Text style={styles.feedbackTitle}>{feedbackTitle}</Text>
-                      <Text style={styles.feedbackBody}>{feedbackBody}</Text>
-                    </View>
-                  ) : null}
-
-                  <View style={styles.actionRow}>
-                    <Pressable
-                      onPress={resetCitySelection}
-                      style={({ pressed }) => [
-                        styles.secondaryAction,
-                        pressed ? styles.actionPressed : null,
-                      ]}
-                    >
-                      <Text style={styles.secondaryActionLabel}>Change city</Text>
-                    </Pressable>
-
-                    {answerState ? (
-                      <Pressable
-                        onPress={handleAdvance}
-                        style={({ pressed }) => [
-                          styles.primaryAction,
-                          pressed ? styles.actionPressed : null,
-                        ]}
-                      >
-                        <Text style={styles.primaryActionLabel}>
-                          {questionIndex + 1 === session.questions.length
-                            ? 'See results'
-                            : 'Next street'}
-                        </Text>
-                      </Pressable>
-                    ) : null}
-                  </View>
-                </View>
-              </View>
-            </View>
-          ) : null}
+          </ScrollView>
         </View>
-      </ScrollView>
+      ) : (
+        <ScrollView
+          contentContainerStyle={[styles.mobileContent, { paddingBottom: spacing.xxl }]}
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.mobileProgressWrap}>
+            <ProgressHeader
+              current={questionIndex + 1}
+              districtName={currentQuestion.districtName}
+              score={score}
+              streak={streak}
+              total={totalQuestions}
+            />
+          </View>
+
+          <MapCard
+            accent={currentQuestion.districtAccent}
+            answerId={currentQuestion.answerId}
+            districtName={currentQuestion.districtName}
+            streets={currentQuestion.streets}
+          />
+
+          <View style={styles.mobileQuizSection}>
+            <Text style={styles.questionTitle}>Which street is highlighted?</Text>
+
+            <View style={styles.optionList}>
+              {currentQuestion.options.map((option, index) => (
+                <QuizOption
+                  key={option.id}
+                  answered={Boolean(answerState)}
+                  index={index}
+                  isCorrectOption={option.id === currentQuestion.answerId}
+                  label={option.label}
+                  onPress={() => handleGuess(option.id)}
+                  selected={selectedOptionId === option.id}
+                />
+              ))}
+            </View>
+
+            {feedbackTitle && feedbackBody ? (
+              <View
+                style={[
+                  styles.feedback,
+                  answerState === 'correct' ? styles.feedbackCorrect : styles.feedbackWrong,
+                ]}
+              >
+                <Text style={styles.feedbackTitle}>{feedbackTitle}</Text>
+                <Text style={styles.feedbackBody}>{feedbackBody}</Text>
+              </View>
+            ) : null}
+
+            <View style={styles.gameActions}>
+              {answerState ? (
+                <Pressable
+                  onPress={handleAdvance}
+                  style={({ pressed }) => [
+                    styles.btnPrimary,
+                    styles.btnFull,
+                    pressed ? styles.btnActive : null,
+                  ]}
+                >
+                  <Text style={styles.btnPrimaryLabel}>
+                    {isLastQuestion ? 'See results' : 'Next'}
+                  </Text>
+                </Pressable>
+              ) : null}
+              <Pressable
+                onPress={resetCitySelection}
+                style={({ pressed }) => [styles.btnGhost, pressed ? styles.btnActive : null]}
+              >
+                <Text style={styles.btnGhostLabel}>Change city</Text>
+              </Pressable>
+            </View>
+          </View>
+        </ScrollView>
+      )}
     </View>
   );
 }
 
+function HintRow({ number, text }: { number: string; text: string }) {
+  return (
+    <View style={hintStyles.row}>
+      <View style={hintStyles.badge}>
+        <Text style={hintStyles.badgeText}>{number}</Text>
+      </View>
+      <Text style={hintStyles.text}>{text}</Text>
+    </View>
+  );
+}
+
+const hintStyles = StyleSheet.create({
+  row: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: spacing.md,
+  },
+  badge: {
+    alignItems: 'center',
+    backgroundColor: palette.accentSoft,
+    borderRadius: radius.sm,
+    height: 30,
+    justifyContent: 'center',
+    width: 30,
+  },
+  badgeText: {
+    color: palette.accent,
+    fontSize: fontSize.sm,
+    fontWeight: '800',
+  },
+  text: {
+    color: palette.textSecondary,
+    fontSize: fontSize.md,
+    flex: 1,
+  },
+});
+
+function ResultStat({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={resultStatStyles.root}>
+      <Text style={resultStatStyles.value}>{value}</Text>
+      <Text style={resultStatStyles.label}>{label}</Text>
+    </View>
+  );
+}
+
+const resultStatStyles = StyleSheet.create({
+  root: {
+    alignItems: 'center',
+    backgroundColor: palette.bgCardElevated,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: palette.border,
+    flex: 1,
+    gap: 4,
+    minWidth: 80,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xl,
+  },
+  value: {
+    color: palette.text,
+    fontSize: fontSize.xxl,
+    fontWeight: '800',
+  },
+  label: {
+    color: palette.textTertiary,
+    fontSize: fontSize.xs,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+  },
+});
+
 const styles = StyleSheet.create({
   root: {
+    backgroundColor: palette.bg,
     flex: 1,
-    backgroundColor: palette.backgroundStart,
   },
-  topGlow: {
+
+  // -- Ambient glow elements --
+  glowTopRight: {
     position: 'absolute',
-    top: -110,
-    right: -40,
+    top: -80,
+    right: -60,
+    width: 240,
+    height: 240,
+    backgroundColor: 'rgba(77, 159, 255, 0.07)',
+    borderRadius: 999,
+  },
+  glowBottomLeft: {
+    position: 'absolute',
+    bottom: -100,
+    left: -80,
     width: 280,
     height: 280,
-    backgroundColor: 'rgba(255, 123, 92, 0.16)',
+    backgroundColor: 'rgba(52, 211, 153, 0.05)',
     borderRadius: 999,
   },
-  bottomGlow: {
-    position: 'absolute',
-    bottom: -120,
-    left: -60,
-    width: 320,
-    height: 320,
-    backgroundColor: 'rgba(95, 211, 182, 0.12)',
-    borderRadius: 999,
-  },
-  scrollContent: {
-    paddingHorizontal: 16,
-    paddingVertical: 32,
-  },
-  shell: {
-    alignSelf: 'center',
-    gap: 20,
-    maxWidth: 1180,
-    width: '100%',
-  },
-  heroCard: {
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    borderRadius: 32,
-    borderWidth: 1,
-    borderColor: palette.border,
-    gap: 18,
-    padding: 24,
-    ...shadowCard,
-  },
-  heroEyebrow: {
-    color: palette.textMuted,
-    fontSize: 12,
-    fontWeight: '800',
-    letterSpacing: 1.8,
-    textTransform: 'uppercase',
-  },
-  heroTitle: {
-    color: palette.text,
-    fontFamily: displayFont,
-    fontSize: 36,
-    lineHeight: 40,
-  },
-  heroBody: {
-    color: palette.textMuted,
-    fontSize: 16,
-    lineHeight: 24,
-    maxWidth: 820,
-  },
-  statGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-  },
-  statPill: {
-    backgroundColor: palette.panelMuted,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: palette.border,
-    gap: 4,
-    minWidth: 112,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-  },
-  statLabel: {
-    color: palette.textSoft,
-    fontSize: 12,
-    fontWeight: '700',
-    letterSpacing: 0.6,
-    textTransform: 'uppercase',
-  },
-  statValue: {
-    color: palette.text,
-    fontSize: 24,
-    fontWeight: '800',
+
+  // -- Centered states (loading, error) --
+  centerContent: {
+    alignItems: 'center',
+    flex: 1,
+    justifyContent: 'center',
+    padding: spacing.xl,
   },
   stateCard: {
     alignItems: 'center',
-    backgroundColor: palette.panel,
-    borderRadius: 28,
+    backgroundColor: palette.bgCard,
+    borderRadius: radius.xl,
     borderWidth: 1,
     borderColor: palette.border,
-    gap: 12,
-    padding: 28,
-    ...shadowCard,
+    gap: spacing.lg,
+    maxWidth: 400,
+    padding: spacing.xxl,
+    width: '100%',
+    ...shadows.md,
+  },
+  stateIcon: {
+    color: palette.danger,
+    fontSize: 28,
+    fontWeight: '900',
+    backgroundColor: palette.dangerSoft,
+    borderRadius: radius.pill,
+    height: 48,
+    width: 48,
+    lineHeight: 48,
+    textAlign: 'center',
+    overflow: 'hidden',
   },
   stateTitle: {
     color: palette.text,
-    fontFamily: displayFont,
-    fontSize: 28,
+    fontFamily: fontFamily.display,
+    fontSize: fontSize.xl,
     textAlign: 'center',
   },
   stateBody: {
-    color: palette.textMuted,
-    fontSize: 15,
-    lineHeight: 23,
-    maxWidth: 520,
+    color: palette.textSecondary,
+    fontSize: fontSize.md,
+    lineHeight: 22,
     textAlign: 'center',
   },
-  selectorCard: {
-    backgroundColor: palette.panel,
-    borderRadius: 30,
-    borderWidth: 1,
-    borderColor: palette.border,
-    gap: 18,
-    padding: 28,
-    ...shadowCard,
+
+  // -- Landing --
+  landingContent: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    padding: spacing.xl,
+    paddingBottom: spacing.xxxl,
   },
-  selectorEyebrow: {
-    color: palette.highlight,
-    fontSize: 12,
-    fontWeight: '800',
-    letterSpacing: 1.8,
+  landingInner: {
+    alignSelf: 'center',
+    gap: spacing.lg,
+    maxWidth: 460,
+    width: '100%',
+  },
+  brandRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginBottom: spacing.sm,
+  },
+  brandDot: {
+    backgroundColor: palette.accent,
+    borderRadius: radius.pill,
+    height: 10,
+    width: 10,
+  },
+  brandLabel: {
+    color: palette.textTertiary,
+    fontSize: fontSize.sm,
+    fontWeight: '700',
+    letterSpacing: 1.2,
     textTransform: 'uppercase',
   },
-  selectorTitle: {
+  landingHeading: {
     color: palette.text,
-    fontFamily: displayFont,
-    fontSize: 32,
-    lineHeight: 36,
-    maxWidth: 720,
+    fontFamily: fontFamily.display,
+    fontSize: 38,
+    lineHeight: 44,
   },
-  selectorBody: {
-    color: palette.textMuted,
-    fontSize: 15,
+  landingBody: {
+    color: palette.textSecondary,
+    fontSize: fontSize.md,
     lineHeight: 23,
-    maxWidth: 620,
   },
-  selectorFieldWrap: {
-    gap: 10,
-    maxWidth: 520,
-    position: 'relative',
-    zIndex: 10,
+  cityPickerWrap: {
+    gap: spacing.sm,
+    marginTop: spacing.sm,
   },
-  selectorLabel: {
-    color: palette.textSoft,
-    fontSize: 12,
+  fieldLabel: {
+    color: palette.textTertiary,
+    fontSize: fontSize.xs,
     fontWeight: '700',
     letterSpacing: 1,
     textTransform: 'uppercase',
   },
-  selectorInput: {
-    backgroundColor: palette.panelElevated,
-    borderColor: palette.border,
-    borderRadius: 18,
-    borderWidth: 1,
-    color: palette.text,
-    fontSize: 16,
-    minHeight: 56,
-    paddingHorizontal: 18,
-    paddingVertical: 14,
+  landingDivider: {
+    backgroundColor: palette.border,
+    height: 1,
+    marginVertical: spacing.xs,
   },
-  dropdownMenu: {
-    backgroundColor: '#0d1b2c',
-    borderColor: palette.border,
-    borderRadius: 20,
-    borderWidth: 1,
-    marginTop: 4,
-    overflow: 'hidden',
-    ...shadowCard,
+  landingHints: {
+    gap: spacing.md,
   },
-  dropdownOption: {
-    paddingHorizontal: 18,
-    paddingVertical: 16,
-  },
-  dropdownOptionPressed: {
-    backgroundColor: 'rgba(255, 255, 255, 0.06)',
-  },
-  dropdownOptionLabel: {
-    color: palette.text,
-    fontSize: 16,
+  hintsTitle: {
+    color: palette.textTertiary,
+    fontSize: fontSize.sm,
     fontWeight: '700',
+    letterSpacing: 0.6,
+    marginBottom: spacing.xs,
   },
-  dropdownEmpty: {
-    paddingHorizontal: 18,
-    paddingVertical: 16,
+
+  // -- Results --
+  resultsContent: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    padding: spacing.xl,
   },
-  dropdownEmptyLabel: {
-    color: palette.textMuted,
-    fontSize: 15,
+  resultsInner: {
+    alignItems: 'center',
+    alignSelf: 'center',
+    gap: spacing.lg,
+    maxWidth: 440,
+    width: '100%',
   },
-  playArea: {
-    gap: 20,
-  },
-  playAreaWide: {
-    alignItems: 'stretch',
-    flexDirection: 'row',
-  },
-  mapColumn: {
-    flex: 1.1,
-  },
-  sidebar: {
-    flex: 0.95,
-  },
-  questionCard: {
-    backgroundColor: palette.panel,
-    borderRadius: 28,
-    borderWidth: 1,
-    borderColor: palette.border,
-    gap: 20,
-    padding: 22,
-    ...shadowCard,
-  },
-  questionEyebrow: {
-    color: palette.highlight,
-    fontSize: 12,
-    fontWeight: '800',
-    letterSpacing: 1.6,
+  resultsEyebrow: {
+    color: palette.textTertiary,
+    fontSize: fontSize.xs,
+    fontWeight: '700',
+    letterSpacing: 1.4,
     textTransform: 'uppercase',
   },
+  resultsHeading: {
+    color: palette.text,
+    fontFamily: fontFamily.display,
+    fontSize: 42,
+    lineHeight: 48,
+    textAlign: 'center',
+  },
+  resultsCity: {
+    color: palette.textSecondary,
+    fontSize: fontSize.lg,
+    fontWeight: '500',
+  },
+  resultsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+    marginTop: spacing.md,
+    width: '100%',
+  },
+  resultsActions: {
+    gap: spacing.sm,
+    marginTop: spacing.lg,
+    width: '100%',
+  },
+
+  // -- Gameplay: wide --
+  wideRoot: {
+    flex: 1,
+    flexDirection: 'row',
+  },
+  wideMapCol: {
+    flex: 1.15,
+    padding: spacing.lg,
+  },
+  wideProgressWrap: {
+    marginBottom: spacing.md,
+  },
+  wideMapWrap: {
+    flex: 1,
+  },
+  wideSidebar: {
+    flexGrow: 1,
+    gap: spacing.lg,
+    maxWidth: 420,
+    padding: spacing.lg,
+    paddingTop: spacing.xxl,
+  },
+
+  // -- Gameplay: mobile --
+  mobileContent: {
+    gap: spacing.md,
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.md,
+  },
+  mobileProgressWrap: {
+    paddingHorizontal: spacing.xs,
+  },
+  mobileQuizSection: {
+    gap: spacing.md,
+    paddingHorizontal: spacing.xs,
+  },
+
+  // -- Shared gameplay --
   questionTitle: {
     color: palette.text,
-    fontFamily: displayFont,
-    fontSize: 30,
-    lineHeight: 34,
-  },
-  questionBody: {
-    color: palette.textMuted,
-    fontSize: 15,
-    lineHeight: 23,
+    fontFamily: fontFamily.display,
+    fontSize: fontSize.xxl,
+    lineHeight: 32,
   },
   optionList: {
-    gap: 12,
+    gap: spacing.sm,
   },
-  feedbackCard: {
-    borderRadius: 22,
+  feedback: {
+    borderRadius: radius.lg,
     borderWidth: 1,
-    gap: 6,
-    padding: 16,
+    gap: spacing.xs,
+    padding: spacing.lg,
   },
   feedbackCorrect: {
-    borderColor: 'rgba(99, 217, 164, 0.32)',
-    backgroundColor: 'rgba(99, 217, 164, 0.12)',
+    borderColor: palette.successBorder,
+    backgroundColor: palette.successSoft,
   },
   feedbackWrong: {
-    borderColor: 'rgba(255, 141, 122, 0.32)',
-    backgroundColor: 'rgba(255, 141, 122, 0.12)',
+    borderColor: palette.dangerBorder,
+    backgroundColor: palette.dangerSoft,
   },
   feedbackTitle: {
     color: palette.text,
-    fontSize: 18,
-    fontWeight: '800',
-  },
-  feedbackBody: {
-    color: palette.textMuted,
-    fontSize: 14,
-    lineHeight: 21,
-  },
-  actionRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-    justifyContent: 'space-between',
-  },
-  primaryAction: {
-    alignItems: 'center',
-    backgroundColor: palette.highlight,
-    borderRadius: 18,
-    justifyContent: 'center',
-    minHeight: 52,
-    minWidth: 160,
-    paddingHorizontal: 20,
-    paddingVertical: 14,
-  },
-  primaryActionLabel: {
-    color: '#241406',
-    fontSize: 15,
-    fontWeight: '800',
-  },
-  secondaryAction: {
-    alignItems: 'center',
-    backgroundColor: palette.panelMuted,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: palette.border,
-    justifyContent: 'center',
-    minHeight: 52,
-    minWidth: 160,
-    paddingHorizontal: 20,
-    paddingVertical: 14,
-  },
-  secondaryActionLabel: {
-    color: palette.text,
-    fontSize: 15,
+    fontSize: fontSize.lg,
     fontWeight: '700',
   },
-  actionPressed: {
-    opacity: 0.88,
-    transform: [{ scale: 0.98 }],
+  feedbackBody: {
+    color: palette.textSecondary,
+    fontSize: fontSize.md,
+    lineHeight: 22,
   },
-  summaryCard: {
-    backgroundColor: palette.panel,
-    borderRadius: 30,
-    borderWidth: 1,
+  gameActions: {
+    gap: spacing.sm,
+    marginTop: spacing.xs,
+  },
+
+  // -- Buttons --
+  btnPrimary: {
+    alignItems: 'center',
+    backgroundColor: palette.accent,
+    borderRadius: radius.lg,
+    justifyContent: 'center',
+    minHeight: 54,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.md,
+    ...shadows.sm,
+  },
+  btnPrimaryLabel: {
+    color: palette.textInverse,
+    fontSize: fontSize.md,
+    fontWeight: '700',
+  },
+  btnSecondary: {
+    alignItems: 'center',
+    backgroundColor: palette.bgCardElevated,
     borderColor: palette.border,
-    gap: 16,
-    padding: 28,
-    ...shadowCard,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    justifyContent: 'center',
+    minHeight: 54,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.md,
   },
-  summaryEyebrow: {
-    color: palette.highlight,
-    fontSize: 12,
-    fontWeight: '800',
-    letterSpacing: 1.8,
-    textTransform: 'uppercase',
-  },
-  summaryTitle: {
+  btnSecondaryLabel: {
     color: palette.text,
-    fontFamily: displayFont,
-    fontSize: 34,
-    lineHeight: 38,
+    fontSize: fontSize.md,
+    fontWeight: '600',
   },
-  summaryBody: {
-    color: palette.textMuted,
-    fontSize: 16,
-    lineHeight: 24,
-    maxWidth: 700,
+  btnGhost: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: spacing.md,
+  },
+  btnGhostLabel: {
+    color: palette.textTertiary,
+    fontSize: fontSize.sm,
+    fontWeight: '600',
+  },
+  btnFull: {
+    width: '100%',
+  },
+  btnActive: {
+    opacity: 0.85,
+    transform: [{ scale: 0.98 }],
   },
 });
