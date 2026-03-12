@@ -70,9 +70,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: palette.border,
     flexDirection: 'row',
-    gap: 14,
-    paddingHorizontal: 16,
-    paddingVertical: 16,
+    gap: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
   },
   optionPressed: {
     opacity: 0.86,
@@ -94,9 +94,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: 'rgba(255,255,255,0.08)',
     borderRadius: 14,
-    height: 44,
+    height: 40,
     justifyContent: 'center',
-    width: 44,
+    width: 40,
   },
   prefixSelected: {
     backgroundColor: 'rgba(92, 157, 255, 0.24)',
@@ -118,7 +118,7 @@ const styles = StyleSheet.create({
   },
   label: {
     color: palette.text,
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '700',
   },
   helper: {
