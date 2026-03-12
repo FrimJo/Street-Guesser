@@ -563,6 +563,8 @@ const styles = StyleSheet.create({
   root: {
     flex: 1,
     backgroundColor: palette.backgroundStart,
+    minHeight: '100%',
+    width: '100%',
   },
   topGlow: {
     position: 'absolute',
@@ -583,6 +585,7 @@ const styles = StyleSheet.create({
     borderRadius: 999,
   },
   scrollContent: {
+    flexGrow: 1,
     paddingHorizontal: 16,
     paddingVertical: 20,
   },
